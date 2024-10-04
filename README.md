@@ -2,7 +2,7 @@
 
 ## Objective
 
-Describe the project objective
+Evaluate the Incidence of Prone Positioning for Patients with Severe Hypoxemic Respiratory Failure Over Time Using the Common Longitudinal ICU Format (CLIF)
 
 ## Required CLIF tables and fields
 
