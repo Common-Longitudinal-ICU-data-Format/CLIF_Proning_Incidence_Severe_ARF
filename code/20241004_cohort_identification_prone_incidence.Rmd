@@ -1,0 +1,244 @@
+---
+title: "cohort_identification_prone_incidence"
+author: "Anna Barker and Chad Hochberg"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r Load Needed Libraries, echo=FALSE}
+packages <- c("duckdb", "lubridate", "tidyverse", "dplyr","table1", "broom", "arrow", "rvest", "readr", "fst", "data.table", "collapse")
+
+install_if_missing <- function(package) {
+  if (!require(package, character.only = TRUE)) {
+    install.packages(package, dependencies = TRUE)
+    library(package, character.only = TRUE)
+  }
+}
+
+sapply(packages, install_if_missing)
+rm(packages, install_if_missing)
+
+#Use Dplyr select as default
+select <- dplyr::select
+
+```
+
+
+#Objective: identify a cohort of hospitalizations with patients who receive mechanical ventilation from CLIF tables
+Identify patients admitted to the hospital in a given date range. Export a list of `hospitalization_id` and filtered CLIF tables for the identified hospitalizations.
+
+# Specify inpatient cohort parameters
+Age >= 18 Years
+PF <=150 on PEEP >= 5 and FiO2 >= 0.6
+Criteria are met in the first 36 hours of IMV initiation (t_PROSEVA_first) 
+AND
+Confirmed on second qualifying blood gas in a 12-hour window beginning 12 hours after the first eligible blood gas (t_proseva_first + 12 hours > t_proseva_second < t_proseva_first + 24 hours) 
+OR
+Patient is proned within 24 hours of initial qualifying blood gas (t_PROSEVA_first < t_proning < t_PROSEVA_first + 24 hours) 
+
+## Date range
+Specify the start and end dates for the cohort
+```{r Start Times and Whether Pediatric Patients Are Included}
+start_date <- "2018-01-01"
+end_date <- "2023-12-31"
+
+include_pediatric <- FALSE
+include_er_deaths <- TRUE
+```
+
+#Specify required CLIF Tables
+```{r}
+#List of table names from CLIF 2.0
+tables <- c("patient", "hospitalization", "vitals", "labs", 
+            "medication_admin_continuous", "adt", 
+            "patient_assessments", "respiratory_support", "position", 
+            "dialysis", "intake_output", "ecmo_mcs", "procedures", 
+            "admission_diagnosis", "provider", "sensitivity", 
+            "medication_orders", "medication_admin_intermittent", 
+            "therapy_details", "microbiology_culture", "sensitivity", "microbiology_nonculture")
+
+# Tables that should be set to TRUE for this project
+true_tables <- c("patient", "hospitalization", "adt",
+                 "vitals", "labs", "medication_admin_continuous", "respiratory_support",
+                 "position")
+
+# Create a named vector and set the boolean values
+table_flags <- setNames(tables %in% true_tables, tables)
+```
+
+#Specify File Paths, Project Path and Site - SITE SPECIFIC
+#Load the Required CLIF Tables (or if using ARROW/parquet refer to table in situ on storage drive)
+```{r}
+tables_location <- '~/workspace/Storage/chochbe1/JH_CCRD/CLIF/rclif'
+project_location <- '~/workspace/Storage/chochbe1/JH_CCRD/CLIF/CLIF_Projects/CLIF_prone_incidence'
+site <- "Hopkins"
+file_type <- 'parquet'
+
+#Create Sub Folders within Project Folder
+# Check if the output directory exists; if not, create it
+if (!dir.exists(paste0(project_location, "/project_tables"))) {
+  dir.create(paste0(project_location, "/project_tables"))
+}
+if (!dir.exists(paste0(project_location, "/project_output"))) {
+  dir.create(paste0(project_location, "/project_output"))
+}
+```
+
+```{r}
+# List all CLIF files in the directory
+clif_table_filenames <- list.files(path = tables_location, 
+                                   pattern = paste0("^clif_.*\\.", file_type, "$"), 
+                                   full.names = TRUE)
+
+# Extract the base names of the files (without extension)
+clif_table_basenames <- basename(clif_table_filenames) |>
+  str_remove(paste0("\\.", file_type, "$"))
+
+# Create a lookup table for required files based on table_flags
+required_files <- paste0("clif_", names(table_flags)[table_flags])
+
+# Check if all required files are present
+missing_tables <- setdiff(required_files, clif_table_basenames)
+if (length(missing_tables) > 0) {
+  stop(paste("Error: Missing required tables:", paste(missing_tables, collapse = ", ")))
+}
+
+# Filter only the filenames that are required
+required_filenames <- clif_table_filenames[clif_table_basenames %in% required_files]
+
+# Read the required files into a list of data frames
+if (file_type == "parquet") {
+  data_list <- lapply(required_filenames, open_dataset)
+} else if (file_type == "csv") {
+  data_list <- lapply(required_filenames, read_csv)
+} else if (file_type == "fst") {
+  data_list <- lapply(required_filenames, read.fst)
+} else {
+  stop("Unsupported file format")
+}
+
+# Assign the data frames to variables based on their file names
+for (i in seq_along(required_filenames)) {
+  # Extract the base name of the file (without extension)
+  object_name <- str_remove(basename(required_filenames[i]), paste0("\\.", file_type, "$"))
+  # Make the object name valid for R (replace invalid characters with underscores)
+  object_name <- make.names(object_name)
+  # Assign the tibble to a variable with the name of the file
+  assign(object_name, data_list[[i]])
+}
+```
+
+#Now Ready to Identify Cohort
+#Identify Hospitalizations for Adults >= 18 Who Were Ever in an ED, Ward or ICU
+#At This Stage Identify Encounters that Are 'Linked', that is continuous admission within the health system but in different hospitals (or sometimes ED to inpatient in same hospital)
+#Script below will create an 'encounter_block' variable toto identify admissions at the patient_id level that are linked
+```{r Identify Hospitalizations in Right Time Frame and Age}
+clif_hospitalization <- clif_hospitalization |>
+   filter(admission_dttm >= as.POSIXct(start_date, tz = "UTC") &
+   admission_dttm <= as.POSIXct(end_date, tz = "UTC")) |>
+   compute()
+
+if (!include_pediatric) {
+  clif_hospitalization <- clif_hospitalization |>
+    filter(age_at_admission >= 18) |>
+    compute()
+}
+
+#To be Thorough Will Keep WARD, ICU and ER Encounters (in case of ED to ICU within one system)
+inpatient_hospitalization_ids <- clif_adt |>
+  filter(location_category %in% c("Ward", "ICU", "ER")) |>
+  select(hospitalization_id) |>
+  collect()
+
+clif_hospitalization <- clif_hospitalization |>
+  collect() |> #Have to Bring in to Environment To Correctly Filter IDs (at JHH)
+  filter(hospitalization_id %in% inpatient_hospitalization_ids$hospitalization_id) |>
+  as_arrow_table() #Put Back to Arrow Table
+rm(inpatient_hospitalization_ids)
+
+#Create an Hospital Block ID - This is to Identify Continuous Hospitalizations When Patients Are Transferred Between Hospitals in One Health System
+#This code is intended be robust to various ways encounters may be coded in CLIF databases
+hospital_blocks <- clif_hospitalization |>
+  select(patient_id, hospitalization_id, admission_dttm, discharge_dttm) |>
+  arrange(patient_id, admission_dttm) |>
+  collect()
+
+#Identify Admissions That Occur Within 3 Hours of a Discharge (Will Consider Those Linked and as Part of One Continuous Encounter)
+#Use Data Table for Speed
+linked_encounters <- setDT(hospital_blocks)
+#Create a Variable for the time of the next admission and time of previous discharge
+linked_encounters[, ':=' (next_admit_dttm = data.table::shift(admission_dttm, n=1, type = "lead")), by = patient_id]
+linked_encounters[, ':=' (prev_dc_dttm = data.table::shift(discharge_dttm, n=1, type = "lag")), by = patient_id]
+#Calculates Time Between Discharge and Next Admit
+linked_encounters[, next_diff_time := difftime(next_admit_dttm, discharge_dttm, units = "hours")]
+linked_encounters[, prev_diff_time := difftime(admission_dttm, prev_dc_dttm, units = "hours")]
+
+#Now Create Variable Indicating a Linked Encounter (next_admit-dc time <6 hours or prev_dc-admint <6 hours)
+linked_encounters[, linked := fcase(
+  (next_diff_time <6 | prev_diff_time <6), 1)]
+#Filter to Only Linked Encounters and number them
+linked_encounters <- linked_encounters[linked==1]
+#This Identifies the First Encounter in a Series of Linked Encounters
+linked_encounters[, first_link := fcase(
+  (rowid(linked)==1 | (next_diff_time<6 & prev_diff_time>6)), 1
+), by = patient_id]
+#Now Numbers Encounters, easier in dplyr
+#Filter to Just First Links, Number them and then Remerge with linked encounters
+temp <- as_tibble(linked_encounters) |>
+ filter(first_link==1) |>
+ group_by(patient_id) |>
+ mutate(link_group=row_number()) |>
+ ungroup() |>
+ select(hospitalization_id, link_group) 
+linked_encounters <- as_tibble(left_join(linked_encounters, temp)) |>
+  fill(link_group, .direction = c("down")) |>
+  #Create a Variable Indicating Which Number of LIinked Encounter the Encounter is
+  group_by(patient_id, link_group) |>
+  mutate(link_number=row_number()) |>
+  ungroup() |>
+  select(hospitalization_id, linked, link_number)
+rm(temp)
+
+#Now Join Back to Hospitalization Table
+clif_hospitalization <- clif_hospitalization |>
+  left_join(linked_encounters) |>
+  mutate(linked=if_else(is.na(linked), 0, linked)) |>
+  compute()
+
+#Pull Out the Any Linked Encounter that Is NOt the First Encounter and Assign Each Encounter an Encounter Block ID in the Original clif_hospitalization table
+df_link <- clif_hospitalization |>
+  filter(link_number>1) |>
+  collect()
+
+clif_hospitalization <- clif_hospitalization |>
+  group_by(patient_id) |>
+  arrange(patient_id, admission_dttm) |>
+  #Remove Link Numbers that Are Not First in Link Encounter
+  filter(link_number==1 | is.na(link_number)) |>
+  #Make Encounter Blocks
+  collect() |>
+  mutate(encounter_block=row_number()) |>
+  rowbind(df_link, fill = TRUE) |> #Bring Back in Link Numbers >1
+  group_by(patient_id) |> arrange(patient_id, admission_dttm) |>
+  fill(encounter_block, .direction = "down") |>
+  ungroup()|>
+  #Finally, for Linked Encounters Identify 'Final_admit_date' and 'final_dc_date' which are the first and last dates of a link block
+  group_by(patient_id, encounter_block) |>
+  mutate(final_admission_dttm=fcase(
+    row_number()==1, admission_dttm
+  )) |>
+  mutate(final_discharge_dttm=fcase(
+    row_number()==n(), discharge_dttm
+  )) |>
+  fill(final_admission_dttm, final_discharge_dttm, .direction = 'updown') |>
+  relocate(encounter_block, .after = 'hospitalization_id') |>
+  as_arrow_table()
+
+rm(linked_encounters, df_link, hospital_blocks)
+
+#Keep Track for Consort Diagram
+patients <- length(unique(clif_hospitalization$patient_id))
+encounters <- length(clif_hospitalization$hospitalization_id)
+cat('\n In', site, 'CLIF data there are', patients,'unique patients with', encounters, 'encounters \n')
+```
+
