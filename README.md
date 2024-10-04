@@ -1,4 +1,4 @@
-# CLIF Project Title
+#Multi-center Evaluation of Prone Positioning Practices for Severe Respiratory Failure
 
 ## Objective
 
@@ -8,8 +8,6 @@ Evaluate the Incidence of Prone Positioning for Patients with Severe Hypoxemic R
 
 Please refer to the online [CLIF data dictionary](https://clif-consortium.github.io/website/data-dictionary.html), [ETL tools](https://github.com/clif-consortium/CLIF/tree/main/etl-to-clif-resources), and [specific table contacts](https://github.com/clif-consortium/CLIF?tab=readme-ov-file#relational-clif) for more information on constructing the required tables and fields. List all required tables for the project here, and provide a brief rationale for why they are required.
 
-
-Example:
 
 The following tables are required:
 1. **patient**: `patient_id`, `race_category`, `ethnicity_category`, `sex_category`
@@ -24,7 +22,28 @@ The following tables are required:
 
 
 ## Cohort identification
-Describe study cohort inclusion and exclusion criteria here
+Inclusion Criteria: 
+1)	Adults (> 18 years) with moderate-severe hypoxemic respiratory failure requiring invasive mechanical ventilation (IMV) between 2018-2023 (NOTE: Not all sites may have full range of data, but will use the years of each database)
+
+2)	Patient meets PROSEVA criteria for proning defined as: 
+a.	P/F < 150 on PEEP > 5 and FiO2 > 0.6 (uses ABG measurements only, no imputation)
+b.	Criteria are met in the first 36 hours of IMV initiation (t_PROSEVA_first)
+      AND
+i.	Confirmed on second qualifying blood gas in a 12-hour window beginning 12 hours after the first eligible blood gas (t_proseva_first + 12 hours > t_proseva_second < t_proseva_first + 24 hours)
+                   OR
+ii.	Patient is proned within 24 hours of initial qualifying blood gas (t_PROSEVA_first < t_proning < t_PROSEVA_first + 24 hours)
+
+3)	For patients meeting the above inclusions, time of enrollment (t_enrollment) is the earlier of time of second qualifying PROSEVA ABG OR time of proning (if patient proned prior to meeting criteria second time). 
+
+
+Exclusion Criteria: 
+1)	Mechanical ventilation initiated at outside hospital:
+a.	Operationalization: 
+i.	OPTION A: If a patient’s first ADT observation is not the ED (location_category!=’ED’) AND first device_category==’IMV’ exclude
+ii.	OPTION B: Use admission_category!=’Transfer’ [syntax not yet in CLIF]
+2)	First airway ventilator observation is with a tracheostomy
+3)	On ECMO within 12-hours of t_enrollment [Will work into future iterations of project once ECMO table built]
+4)	For patients with more than 1 eligible encounter within a given CLIF consortium system, 1 eligible encounter per patient will be randomly selected and included
 
 ## Expected Results
 
