@@ -5,7 +5,7 @@ date: "`r Sys.Date()`"
 output: html_document
 ---
 
-```{r Load Needed Libraries, echo=FALSE}
+```{r Load Needed Libraries, include=FALSE}
 packages <- c("duckdb", "lubridate", "tidyverse", "dplyr","table1", "broom", "arrow", "rvest", "readr", "fst", "data.table", "collapse")
 
 install_if_missing <- function(package) {
@@ -241,4 +241,295 @@ patients <- length(unique(clif_hospitalization$patient_id))
 encounters <- length(clif_hospitalization$hospitalization_id)
 cat('\n In', site, 'CLIF data there are', patients,'unique patients with', encounters, 'encounters \n')
 ```
+
+#Filter Only to Patients Who Receive Mechanical Ventilation
+```{r}
+#Bring in Temporary File with patient_id, hospitalization_id and encounter_block
+temp_ids <- clif_hospitalization |>
+  select(patient_id, hospitalization_id, encounter_block) |>
+  collect()
+
+#Identify Patients Who EVER Received Mechanical Ventilation During a Hospitalization
+vent <- clif_respiratory_support |>
+  #Only Need IDs in the Current Working ClIF hospitalization Table
+  filter(hospitalization_id %in% temp_ids$hospitalization_id) |>
+  #Will Also Merge in Encounter Block Here - Will Allow Us to Keep Track of LInked Encounters
+  left_join(temp_ids) |>
+  compute()
+rm(temp_ids)
+
+#Identify Those Who Have Ever Been on a Vent During an Encounter Block
+vent <- vent |> 
+  mutate(on_vent=if_else(device_category=='IMV', 1, 0)) |>
+  group_by(patient_id, encounter_block) |>
+  mutate(ever_vent=if_else(max(on_vent, na.rm=T)==1, 1, 0)) |>
+  filter(ever_vent==1) |>
+  select(-ever_vent) |>
+  ungroup() |>
+  compute()
+
+#Identify First Vent Start Time and Vent Duration
+#Keep Track for Consort Diagram
+patients <- length(unique(vent$patient_id))
+encounters <- length(unique(vent$hospitalization_id))
+cat('\n Paitents Receiving Mechanical Ventilation: \n  In', site, 'CLIF data there are', patients,'unique patients with', encounters, 'encounters \n')
+```
+
+#Identify Ventilator Episodes
+```{r}
+#Now Identify Ventilator Episodes and the Duration of Each Episodes
+#This Uses Logic Created by Nick Ingraham to Carry Forward Device Category and Device Names
+vent <- vent |>
+  mutate(
+    device_category = 
+    if_else(
+        is.na(device_category) & is.na(device_name) &
+          str_detect(mode_category, 
+                     "Pressure Control|Assist Control-Volume Control|Pressure Support/CPAP|Pressure-Regulated Volume Control|SIMV"),
+        "IMV",
+        device_category
+      ),
+    device_name = 
+      if_else(
+        str_detect(device_category, "IMV") & is.na(device_name) &
+          str_detect(mode_category, "Pressure Control|Assist Control-Volume Control|Pressure Support/CPAP|Pressure-Regulated Volume Control|SIMV"),
+        "IMV",
+        device_name
+      ),
+  ) |>
+  collect() |>
+  #     If device before is VENT + normal vent things ... its VENT too 
+  group_by(patient_id, encounter_block) |>
+  arrange(patient_id, recorded_dttm) |>
+  mutate(device_category = fifelse(is.na(device_category) & 
+                                     lag(device_category == "IMV") & 
+                                     tidal_volume_set > 1 & 
+                                     resp_rate_set > 1 & 
+                                     peep_set > 1, 
+                                   "IMV", 
+                                   device_category)) |>
+  # If device after is VENT + normal vent things ... its VENT too 
+  mutate(device_category = fifelse(is.na(device_category) & 
+                                     lead(device_category == "IMV") & 
+                                     tidal_volume_set > 1 & 
+                                     resp_rate_set > 1 & 
+                                     peep_set > 1, 
+                                   "IMV", 
+                                   device_category)) |>
+  # doing this for BiPAP as well
+  mutate(device_category = fifelse(is.na(device_category) & 
+                                     lag(device_category == "NIPPV") & 
+                                     #minute_vent > 1 & ###NEED TO BUILD INTO JHU DATA
+                                     pressure_support_set > 1, 
+                                   "NIPPV", 
+                                   device_category)) |>
+  
+  mutate(device_category = fifelse(is.na(device_category) & 
+                                     lead(device_category == "NIPPV") & 
+                                     #minute_vent > 1 & ###NEED TO BUILD INTO JHU DATA
+                                     pressure_support_set > 1, 
+                                   "NIPPV", 
+                                   device_category)) |>
+  ungroup()
+  
+# Now use a Fill Forward Method with Device Category
+vent <- vent |>
+  group_by(patient_id, encounter_block) |>
+  fill(device_category, .direction = 'downup') |>
+  ungroup() |>
+  as_arrow_table()
+
+#Goal of Function Below is to Define Ventilator Episodes & Ventilator Liberations (> 24 Hours off of MV)
+#First will Filter Down to Reduced Table of 'device_category' transitions; For example: This includes rows when a device_category switches from one to another; Also keep First and Last Rows
+device_transitions <- vent |> 
+  arrange(patient_id, recorded_dttm) |> #Puts in Correct Order
+  collect() |>
+  group_by(patient_id, encounter_block) |>
+  mutate(prev_value_diff = fifelse(
+    (device_category!=data.table::shift(device_category, n=1, type = "lag")), 1, 0)) |>
+  mutate(prev_value_diff=fifelse(is.na(prev_value_diff), 0, prev_value_diff)) |> #For First Row
+  filter(prev_value_diff == 1 |
+           row_number()==1 | row_number() == n()) |>
+  ungroup()
+
+#Define Ventilator Episodes - Define Ventilator Liberation as 24 Hours Breathing Off Ventilator, Otherwise Will Include That Time in Ventilator Duration
+#Temporarily Number Vent Episodes
+device_transitions <- device_transitions |>
+  group_by(patient_id, encounter_block, device_category) |>
+  mutate(category_number=row_number()) |>
+  #If a Last Row of an Enconter Block is Not a Device Transition Set Category Number to NA
+  group_by(patient_id, encounter_block) |>
+  mutate(category_number=fifelse(
+    row_number()==n() & prev_value_diff!=1, NaN, category_number
+  )) |>
+  ungroup() |>
+  group_by(patient_id, encounter_block) |>
+#Define Vent Start and Stop (Temporary)
+  mutate(vent_start=fcase(
+    device_category=='IMV' & (prev_value_diff==1 | row_number()==1), recorded_dttm
+  )) |>
+  mutate(vent_stop=fcase(
+    device_category=='IMV' & lead(prev_value_diff)==1, lead(recorded_dttm),
+    device_category=='IMV' & lead(row_number())==n(), lead(recorded_dttm) #This is Why we Kept Last Row
+  )) |>
+  fill(vent_stop, .direction = 'down') |>
+  #Define Vent Liberation of Prior Vent Episodes as 24 Hours without device_category=='IMV', can fill backwards for this
+  mutate(prior_liberation_new_vent=fcase(
+    #This says if the next time someone is on a vent > 24 hours after the last time on a vent it will be a new episode
+    device_category=='IMV' & category_number==1, 1, #Need to Define This First
+    device_category=='IMV' & recorded_dttm>lag(vent_stop)+dhours(24), 1,
+    device_category=='IMV' & recorded_dttm<=lag(vent_stop)+dhours(24), 0
+  )) |>
+  #Label if Last Row so Vent Duration Can be Defined by Discharge Time
+  mutate(last_row=fifelse(row_number()==n(), 1, 0)) |>
+  ungroup()
+
+#For Patients Who Start IMV on Last Row can Calculate Time on Vent Using Final Discharge Time
+dc_time <- clif_hospitalization |>
+  select(patient_id, encounter_block, final_discharge_dttm) |>
+  distinct()  |> #1 Row for 1 Encounter Block 
+  collect()
+
+device_transitions <- device_transitions |>
+  join(dc_time, how = 'left') |>
+  #Alternative Way of Labelling Liberation
+  group_by(patient_id, encounter_block) |>
+  mutate(vent_stop=fifelse(
+    device_category=='IMV' & is.na(vent_stop) & last_row==1, final_discharge_dttm, vent_stop)) |>
+  mutate(liberation=fcase(
+    device_category!='IMV' & recorded_dttm>vent_stop+dhours(24), 1,
+    device_category=='IMV' & last_row==1, 0
+  )) |>
+  fill(liberation, .direction = 'up') |>
+  ungroup()
+rm(dc_time)
+
+#Renumber 'New' Episodes of MV, that is if the first episode, and then episodes in which the patient was previously liberated, keep the intervening episodes so we can count final duration
+vent_episodes <- device_transitions |>
+  filter(device_category=='IMV') |>
+  group_by(patient_id, encounter_block, prior_liberation_new_vent) |>
+  mutate(vent_episode_number=fifelse(
+    prior_liberation_new_vent==1, row_number(), NaN)) |>
+  group_by(patient_id, encounter_block) |>
+  fill(vent_episode_number, .direction = 'down') |>
+  group_by(patient_id, encounter_block, vent_episode_number) |>
+  mutate(vent_episode_start=fcase(
+    row_number()==1, vent_start
+  )) |>
+  mutate(vent_episode_end=fcase(
+    row_number()==n(), vent_stop
+  )) |>
+  mutate(liberation=fcase(
+    row_number()==n(), liberation,
+    default = NaN
+  )) |>
+  fill(vent_episode_start, vent_episode_end, liberation, .direction = 'downup') |>
+  #Now Keep First Row for Each Vent Episode
+  filter(row_number()==1) |>
+  ungroup() |>
+  #Calculate Vent Duration
+  mutate(vent_duration_hours=as.duration(vent_episode_end-vent_episode_start)/dhours(1)) |>
+  select(patient_id, hospitalization_id, encounter_block, device_category, mode_category, 
+         liberation:vent_duration_hours)
+
+#Describe Numbers
+cat('\nAt this stage in', site, 'data there are', dim(vent_episodes)[1], 'ventilator episodes among', 
+    length(unique(vent_episodes$hospitalization_id)), 'hospitalizations from', 
+    length(unique(vent_episodes$patient_id)), 'patients.')
+
+#Now Filter to Just First Vent Episodes that are Greater than 36 Hours Long
+vent_eligible <- vent_episodes |>
+  filter(vent_episode_number==1 & vent_duration_hours>36)
+
+#Describe Numbers
+cat(site, '\n After filtering to patients with >36 hours of MV for First Episode there are,', dim(vent_eligible)[1], 'ventilator episodes among,',length(unique(vent_eligible$hospitalization_id)), 'hospitalizations from',length(unique(vent_eligible$patient_id)), 'patients.')
+
+rm(device_transitions)
+```
+#EXLUSIONS:
+-Tracheostomy within 24 hours of first vent
+-Patient admitted from OSH on the vent
+-After Final Identiication of ABG criteria will then randomly select 1 eligible encounter for each patient with more than 1 eligible
+```{r Implement Exclusion Criteria}
+#List of patient_id, encounter_block, hospitalization_id and vent_start
+temp_ids <- vent_eligible |>
+  select(patient_id, encounter_block)
+
+#Tracheostomy in First 24 Hours of First Vent
+trach <- clif_respiratory_support |>
+  left_join(temp_ids) |>
+  filter(!is.na(encounter_block)) |> #THis allows us to keep all encounter block info
+  select(patient_id, recorded_dttm, encounter_block, tracheostomy) |>
+  filter(tracheostomy==1) |>
+  arrange(patient_id, encounter_block, recorded_dttm) |>
+  collect() |>
+  group_by(patient_id, encounter_block) |>
+  filter(row_number()==1) |>
+  mutate(first_trach_time=fcase(
+    row_number()==1, recorded_dttm
+  )) |>
+  ungroup() |>
+  select(patient_id, encounter_block, tracheostomy, first_trach_time)
+
+#Merge with Vent Eligible and Exclude if first_trach_time within 24 hours of vent start
+vent_eligible <- vent_eligible |>
+  join(trach, how = 'left') |>
+  mutate(tracheostomy=fifelse(is.na(tracheostomy), 0, tracheostomy)) |> #If not merged indicates no trach performed
+  mutate(trach_within_24=fcase(
+    vent_episode_start+dhours(24)>first_trach_time, 1,
+    default = 0
+  ))
+
+#Describe for Consort
+cat('\n At', site,',', length(unique(vent_eligible$hospitalization_id[vent_eligible$tracheostomy==1])), 'patient hospitalizations were ventilated via a tracheostomy,', length(unique(vent_eligible$hospitalization_id[vent_eligible$trach_within_24==1])), 'within 24 hours of ventilator start and are thus excluded. \n')
+
+#Vent Eligible Excluding Early Trach
+vent_eligible <- vent_eligible |>
+  filter(trach_within_24!=1)
+rm(trach)
+
+#How Many Patients Arrive First to ICU and First Device is a Vent?
+#First Define What the First Location Is
+osh_transfer <- clif_adt |>
+  left_join(temp_ids) |> #Here need to join first and then filter out if encounter ID is missing
+  filter(!is.na(encounter_block)) |>
+  arrange(patient_id, encounter_block, in_dttm) |>
+  collect() |>
+  group_by(patient_id, encounter_block) |> # Replace group_column with the column(s) you want to group by
+  filter(row_number()==1) |>
+  ungroup() |>
+  mutate(first_location=location_category)
+
+#Now Define First Device Category
+first_device <- clif_respiratory_support |>
+  left_join(temp_ids) |>
+  filter(!is.na(encounter_block)) |>
+  filter(!is.na(device_category)) |>
+  arrange(patient_id, encounter_block, recorded_dttm) |>
+  collect() |>
+  group_by(patient_id, encounter_block) |>
+  filter(row_number()==1) |>
+  mutate(first_device=device_category) |>
+  select(patient_id, encounter_block, first_device)
+
+#Merge back with OSH
+osh_transfer <- osh_transfer |>
+  join(first_device, how ='left') |>
+  mutate(transfer_on_vent=fifelse(
+    first_location=='ICU' & first_device=='IMV', 1, 0
+  )) |>
+  select(patient_id, encounter_block, transfer_on_vent)
+
+#Merge Into Vent Eligible
+vent_eligible <- vent_eligible |>
+  left_join(osh_transfer) 
+
+#Describe for Consort
+cat('\n At', site,',', length(unique(vent_eligible$hospitalization_id[vent_eligible$transfer_on_vent==1])), 'patient hospitalizations were from patients who met criteria for having been transfered while on a ventilator and are thus excluded,') 
+
+#Current Vent Eligible Cohort
+vent_eligible <- vent_eligible |>
+  filter(transfer_on_vent!=1)
+```
+
 
