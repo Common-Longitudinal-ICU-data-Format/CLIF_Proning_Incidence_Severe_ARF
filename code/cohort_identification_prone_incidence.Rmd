@@ -74,9 +74,12 @@ table_flags <- setNames(tables %in% true_tables, tables)
 #Specify File Paths, Project Path and Site - SITE SPECIFIC
 #Load the Required CLIF Tables (or if using ARROW/parquet refer to table in situ on storage drive)
 ```{r}
-tables_location <- '~/workspace/Storage/chochbe1/JH_CCRD/CLIF/rclif'
-project_location <- '~/workspace/Storage/chochbe1/JH_CCRD/CLIF/CLIF_Projects/CLIF_prone_incidence'
-site <- "Hopkins"
+#tables_location <- '~/workspace/Storage/chochbe1/JH_CCRD/CLIF/rclif'
+#project_location <- '~/workspace/Storage/chochbe1/JH_CCRD/CLIF/CLIF_Projects/CLIF_prone_incidence'
+#site <- "Hopkins"
+
+tables_location<- 'Z:/barker/clif_temp'
+project_location<- 'Z:/barker/projects/CLIF_prone_incidence'
 file_type <- 'parquet'
 
 #Create Sub Folders within Project Folder
@@ -195,7 +198,7 @@ temp <- as_tibble(linked_encounters) |>
  mutate(link_group=row_number()) |>
  ungroup() |>
  select(hospitalization_id, link_group) 
-linked_encounters <- as_tibble(left_join(linked_encounters, temp)) |>
+linked_encounters <- as_tibble(left_join(linked_encounters, temp, join_by(hospitalization_id))) |>
   fill(link_group, .direction = c("down")) |>
   #Create a Variable Indicating Which Number of LIinked Encounter the Encounter is
   group_by(patient_id, link_group) |>
@@ -236,16 +239,16 @@ clif_hospitalization <- clif_hospitalization |>
   mutate(final_discharge_dttm=fcase(
     row_number()==n(), as.POSIXct(discharge_dttm)
   )) |>
-  mutate(final_disposition_category=fcase(
-    row_number()==n(), disposition_category
+  mutate(final_discharge_category=fcase(
+    row_number()==n(), discharge_category
   )) |>
-  mutate(final_disposition_name=fcase(
-    row_number()==n(), disposition_name
+  mutate(final_discharge_name=fcase(
+    row_number()==n(), discharge_name
   )) |>
   fill(final_admission_dttm, 
        final_discharge_dttm,
-       final_disposition_name, 
-       final_disposition_category, 
+       final_discharge_name, 
+       final_discharge_category, 
        .direction = 'updown') |>
   relocate(encounter_block, .after = 'hospitalization_id') |>
   as_arrow_table()
@@ -412,7 +415,7 @@ device_transitions <- device_transitions |>
   #Alternative Way of Labelling Liberation
   group_by(patient_id, encounter_block) |>
   mutate(vent_stop=fifelse(
-    device_category=='IMV' & is.na(vent_stop) & last_row==1, final_discharge_dttm, vent_stop)) |>
+    device_category=='IMV' & is.na(vent_stop) & last_row==1, final_discharge_dttm, as.POSIXct(vent_stop))) |>
   mutate(liberation=fcase(
     device_category!='IMV' & recorded_dttm>as.POSIXct(vent_stop)+dhours(24), 1,
     device_category=='IMV' & last_row==1, 0
@@ -464,7 +467,7 @@ cat(site, '\n After filtering to patients with >36 hours of MV for First Episode
 rm(device_transitions)
 ```
 #EXLUSIONS:
--Tracheostomy within 24 hours of first vent
+-Tracheostomy prior to completing first 24 hours of first vent (includes tracheostomy on admission). 
 -Patient admitted from OSH on the vent
 -After Final Identiication of ABG criteria will then randomly select 1 eligible encounter for each patient with more than 1 eligible
 ```{r Implement Exclusion Criteria}
@@ -559,8 +562,8 @@ osh_transfer <- osh_transfer |>
 
 #Merge Into Vent Eligible
 vent_eligible <- vent_eligible |>
-  left_join(osh_transfer) 
-rm(osh_transfer_, first_device)
+  left_join(osh_transfer, join_by(patient_id, encounter_block)) 
+rm(osh_transfer, first_device)
 
 #Describe for Consort
 cat('\n At', site,',', length(unique(vent_eligible$hospitalization_id[vent_eligible$transfer_on_vent==1])), 'patient hospitalizations were from patients who met criteria for having been transfered while on a ventilator and are thus excluded,') 
@@ -599,7 +602,7 @@ clif_labs <- clif_labs |>
 
 #PaO2 Table
 pao2 <- clif_labs |>
-  filter(lab_category=='pao2' & !is.na(lab_value)) |>
+  filter(lab_category=='po2_arterial' & !is.na(lab_value)) |>
   filter(lab_value!='NULL') |>
   filter(lab_value_numeric>40 & lab_value_numeric<=700) |> #Lower Bound Filtering for PaO2 Outliers > 40 and upper bound assumes FiO2 of 1.0 A-a gradient of 0 and Paco2 of 10
   distinct() |>
@@ -620,6 +623,7 @@ vent_data <- clif_respiratory_support |>
   arrange(patient_id, encounter_block, recorded_dttm) |>  
   group_by(patient_id, encounter_block) |>
   fill(device_category, device_name, .direction = 'down') |>
+  mutate(recorded_dttm=as.POSIXct(recorded_dttm)) |> #to merge with pao2 data
   ungroup() |>
   #Bring in PaO2 Here and Then Fill Again
   join(pao2, how ='full') |>
