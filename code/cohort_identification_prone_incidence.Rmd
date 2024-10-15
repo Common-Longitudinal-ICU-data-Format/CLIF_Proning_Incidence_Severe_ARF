@@ -25,7 +25,19 @@ if (!dir.exists(paste0(project_location, "/project_output"))) {
 
 
 ```{r Load Needed Libraries, include=FALSE}
-packages <- c("duckdb", "lubridate", "tidyverse", "dplyr","table1", "broom", "arrow", "rvest", "readr", "fst", "data.table", "collapse", "tictoc")
+packages <- c("duckdb", 
+              "lubridate", 
+              "tidyverse", 
+              "dplyr",
+              "table1", 
+              "broom", 
+              "arrow", 
+              "rvest", 
+              "readr", 
+              "fst", 
+              "data.table", 
+              "collapse", 
+              "tictoc")
 
 install_if_missing <- function(package) {
   if (!require(package, character.only = TRUE)) {
@@ -52,11 +64,11 @@ Identify patients admitted to the hospital in a given date range. Export a list 
 # Specify inpatient cohort parameters
 Age >= 18 Years
 PF <=150 on PEEP >= 5 and FiO2 >= 0.6
-Criteria are met in the first 36 hours of IMV initiation (t_PROSEVA_first) 
+Criteria are met in the first 36 hours of IMV initiation (t_PROSEVA_first)
 AND
-Confirmed on second qualifying blood gas in a 12-hour window beginning 12 hours after the first eligible blood gas (t_proseva_first + 12 hours > t_proseva_second < t_proseva_first + 24 hours) 
+Confirmed on second qualifying blood gas in a 12-hour window beginning 12 hours after the first eligible blood gas (t_proseva_first + 12 hours > t_proseva_second < t_proseva_first + 24 hours)
 OR
-Patient is proned within 24 hours of initial qualifying blood gas (t_PROSEVA_first < t_proning < t_PROSEVA_first + 24 hours) 
+Patient is proned within 24 hours of initial qualifying blood gas (t_PROSEVA_first < t_proning < t_PROSEVA_first + 24 hours)
 
 ## Date range
 Specify the start and end dates for the cohort
@@ -554,7 +566,7 @@ first_device <- clif_respiratory_support |>
 osh_transfer <- osh_transfer |>
   join(first_device, how ='left') |>
   mutate(transfer_on_vent=fifelse(
-    first_location=='ICU' & first_device=='IMV', 1, 0
+    tolower(first_location)=='icu' & first_device=='IMV', 1, 0
   )) |>
   select(patient_id, encounter_block, transfer_on_vent)
 
@@ -625,6 +637,7 @@ vent_data <- clif_respiratory_support |>
   ungroup() |>
   #Bring in PaO2 Here and Then Fill Again
   join(pao2, how ='full') |>
+  fill(vent_episode_end, vent_episode_start, .direction = 'downup') |>
   arrange(patient_id, encounter_block, recorded_dttm) |>  
   group_by(patient_id, encounter_block) |>
   fill(device_category, device_name, .direction = 'down') |>
@@ -676,7 +689,7 @@ pf_table <- vent_data |>
   )
 pf_table
 write_csv(pf_table, paste0(project_location, "/project_output/pfratio_sample_size_", site, ".csv"))
-rm(pf_table)
+rm(pf_table, pao2)
 ```
 
 
@@ -864,10 +877,14 @@ proseva_prone_table <- proseva_criteria |>
   mutate(proned=fifelse(
     !is.na(first_prone_time), 1, 0
   )) |>
+  #Keep Track of Patients Who Are Proned Before Proseva Criteria Met (t_enrollment<t_proseva_first)
+  mutate(cohort_eligible=fifelse(
+    t_enrollment<t_proseva_first, 0, cohort_eligible
+  )) |>
   #Finally, Primary Outcome is Proned within 12 Hours Of Enrollment
   mutate(prone_12hour_outcome=fcase(
     (as.duration(first_prone_time-t_enrollment)<=dhours(12)), 1,
-    (as.duration(first_prone_time-t_enrollment)>dhours(12)), 1,
+    (as.duration(first_prone_time-t_enrollment)>dhours(12)), 0,
     !is.na(t_enrollment) & proned==0, 0
   ))
 
@@ -932,6 +949,65 @@ hospitalization_vars <- clif_hospitalization |>
     final_discharge_category %in% c('Expired', 'Hospice'), 1, 0
   )) 
 
+#Will Use Cohort_ids, but Also a Table of Vent Times and t_enrollment
+temp <- hospitalization_vars |> select(patient_id, encounter_block, final_admission_dttm, final_discharge_dttm)
+cohort_times <- prone_incidence_cohort |>
+  select(patient_id, encounter_block, t_enrollment, vent_episode_start, vent_episode_end) |>
+  left_join(temp) 
+rm(temp)
+
+#What Hospital is the Patient at When t_enrollment Occurs
+#Was the Patient in a Procedural Area In the Week Prior to t_enrollment?
+hospital_location <- clif_adt |>
+  left_join(cohort_hospitalization_ids) |>
+  filter(in_cohort==1) |>
+  left_join(cohort_times) |>
+  arrange(patient_id, encounter_block, in_dttm) |>
+  collect() |>
+  mutate(enrollment_icu=fifelse(
+    as.POSIXct(t_enrollment)>=as.POSIXct(in_dttm) &
+      as.POSIXct(t_enrollment)<=as.POSIXct(out_dttm), 1,0
+  )) |>
+  #If the Patient Meets Criteria in an ED or Procedural Area Take the First Non Procedural Location After This Row
+  group_by(patient_id, encounter_block) |>
+  #Number the Rows
+  mutate(location_count=row_number()) |>
+  #Identify Location Category of the Current 'enrollment_icu'
+  mutate(temp_category=fcase(
+    enrollment_icu==1, location_category
+  )) |>
+  mutate(temp_count=fcase(
+    enrollment_icu==1, location_count
+  )) |>
+  fill(temp_category, temp_count, .direction = 'updown') |>
+  #Only Number the Locations that Come After the Number of Location Where Enrollment ICU Met
+  #By Making Those At or Before T-Enrollment Allows us to Take Minimum Row Number to Get the Next
+  mutate(location_count=fifelse(
+    location_count<=temp_count, 99999, location_count
+  )) |>
+  #Make ED or Procedural Areas NA in terms of Count
+  mutate(location_count=fifelse(
+    location_category %in% c('ed', 'procedural'), NaN, location_count
+  )) |>
+  #If the Patient t_enrollment was in ed or procedural area, take the first non ed/procedural area after this
+  mutate(enrollment_icu=fifelse(
+    temp_category %in% c('procedural', 'ed') & 
+      location_count==min(location_count, na.rm=TRUE), 1, enrollment_icu
+  )) |>
+  #If the Patient Meets Criteria in an Operative Area Take the First Non Procedural Location Before or After
+  mutate(or_before_enrollment=fifelse(
+    tolower(location_category) =='procedural' & 
+      as.POSIXct(in_dttm)>=as.POSIXct(t_enrollment)-ddays(7) &
+      as.POSIXct(in_dttm)<=as.POSIXct(t_enrollment), 1, 0
+  )) |>
+  group_by(patient_id, encounter_block) |>
+  mutate(or_before_enrollment=max(or_before_enrollment, na.rm = TRUE)) |>
+  ungroup() |>
+  filter(enrollment_icu==1) |>
+  select(patient_id, encounter_block, location_category, location_name, or_before_enrollment) |>
+  rename(enrollment_location_category = location_category,
+         enrollment_location_name = location_name)
+
 demos <- clif_patient |>
   filter(patient_id %in% cohort_ids$patient_id) |>
   collect()|>
@@ -941,13 +1017,6 @@ demos <- clif_patient |>
   filter(row_number()==n()) |>
   select(patient_id, race_category, ethnicity_category, sex_category) |>
   ungroup()
-
-#Will Use Cohort_ids, but Also a Table of Vent Times and t_enrollment
-temp <- hospitalization_vars |> select(patient_id, encounter_block, final_admission_dttm, final_discharge_dttm)
-cohort_times <- prone_incidence_cohort |>
-  select(patient_id, encounter_block, t_enrollment, vent_episode_start, vent_episode_end) |>
-  left_join(temp) 
-rm(temp)
 
 #Calculate BMI
 bmi <- clif_vitals |>
@@ -995,32 +1064,202 @@ bmi <- clif_vitals |>
   mutate(bmi=study_weight_kg/((study_height_inches/39.37)^2)) |>
   select(patient_id, encounter_block, study_height_inches, study_weight_kg, bmi)
 
+#Lowest PF Between Time of Intubation and t_enrollment
+temp_times <- cohort_times |>
+  select(patient_id, encounter_block, t_enrollment)
+min_pf <- vent_data |>
+  filter(!is.na(pf_ratio)) |>
+  join(temp_times, how = 'left') |>
+  filter(as.POSIXct(recorded_dttm)>=as.POSIXct(vent_episode_start) &
+           as.POSIXct(recorded_dttm)<=as.POSIXct(t_enrollment)) |>
+  group_by(patient_id, encounter_block) |>
+  mutate(min_pf_ratio=min(pf_ratio, na.rm = TRUE)) |>
+  filter(row_number()==1) |>
+  ungroup() |>
+  select(patient_id, encounter_block, min_pf_ratio)
+rm(temp_times)
+
+#Calculate Norepinephrine Equivalent
+norepi_equivalent <- clif_medication_admin_continuous |>
+  filter(hospitalization_id %in% cohort_hospitalization_ids$hospitalization_id) |>
+  left_join(cohort_hospitalization_ids) |>
+  filter(in_cohort==1) |>
+  filter(med_group=='vasoactives') |>
+  filter(!is.na(med_dose)) |>
+  left_join(cohort_times) |>
+  left_join(bmi) |> #For Weights
+  arrange(patient_id, encounter_block, admin_dttm) |>
+  collect() |>
+  filter(as.POSIXct(admin_dttm)>=as.POSIXct(t_enrollment)-dhours(12) & 
+           as.POSIXct(admin_dttm)<=as.POSIXct(t_enrollment)) |>
+  #Define if a Pressor Needs Weight Based Dosing
+  mutate(needs_wt_based=fifelse((med_dose_unit=="mcg/min" | med_dose_unit=="mg/min" | med_dose_unit=="ng/min"), 1, 0)) |>
+  #Filter if Epinephrine is Given in 'mg' as this is code dosing
+  filter(!(med_category=='epinephrine' & med_dose_unit=='mg')) |>
+  mutate(wt_dose=fcase(
+    needs_wt_based==0, med_dose,
+    needs_wt_based==1, med_dose/study_weight_kg)) |>
+  group_by(patient_id, encounter_block) |>
+  mutate(norepi_dose=fcase(med_category=="norepinephrine" , wt_dose
+)) |>
+  fill(norepi_dose, .direction ="down") |>
+  mutate(norepi_on=fcase(
+    norepi_dose > 0 , 1,
+    (is.na(norepi_dose) | norepi_dose==0) , 0 )) |>
+  mutate(norepi_dose=fifelse(is.na(norepi_dose), 0, norepi_dose)) |> #Need to Have Dose be Zero if No Dose Got Carried Forward
+  mutate(epi_dose=fcase(
+    med_category=="epinephrine" , wt_dose
+  )) |>
+  fill(epi_dose, .direction = "down") |>
+  mutate(epi_on=fcase(
+    epi_dose>0 , 1,
+    (is.na(epi_dose) | epi_dose==0) , 0 )) |>
+  mutate(epi_dose=fifelse(is.na(epi_dose), 0, norepi_dose)) |>
+  mutate(phenyl_dose=fcase(
+    med_category=="phenylephrine" , wt_dose
+  )) |>
+  fill(phenyl_dose, .direction = "down") |>
+  mutate(phenyl_on=fcase(
+    phenyl_dose>0 , 1,
+    (is.na(phenyl_dose) | phenyl_dose==0) , 0 )) |>
+  mutate(phenyl_dose=fifelse(is.na(phenyl_dose), 0, phenyl_dose)) |>
+  mutate(vaso_dose=fcase(
+    med_category=="vasopressin" , wt_dose
+  )) |>
+  fill(vaso_dose, .direction = "down") |>
+  mutate(vaso_on=fcase(
+    vaso_dose>0 , 1,
+    (is.na(vaso_dose) | vaso_dose==0) , 0 )) |>
+  mutate(vaso_dose=fifelse(is.na(vaso_dose), 0, vaso_dose)) |>
+  mutate(angiotensin_dose=fcase(
+    med_category=="angiotensin" , wt_dose
+  )) |>
+  fill(angiotensin_dose, .direction = "down") |>
+  mutate(angiotensin_on=fcase(
+    angiotensin_dose>0 , 1,
+    (is.na(angiotensin_dose) | angiotensin_dose==0) , 0 )) |>
+  mutate(angiotensin_dose=fifelse(is.na(angiotensin_dose), 0, angiotensin_dose)) |>
+  mutate(dopa_dose=fcase(
+    med_category=="dopamine" , wt_dose
+  )) |>
+  fill(dopa_dose, .direction = "down") |>
+  mutate(dopa_on=fcase(
+    dopa_dose>0 , 1,
+    (is.na(dopa_dose) | dopa_dose==0) , 0 )) |>
+  mutate(dopa_dose=fifelse(is.na(dopa_dose), 0, dopa_dose)) |>
+  mutate(dobut_dose=fcase(
+    med_category=="dobutamine" , wt_dose
+  )) |>
+  fill(dobut_dose, .direction = "down") |>
+  mutate(milrinone_dose=fcase(
+    med_category=="milrinone" , wt_dose
+  )) |>
+  fill(milrinone_dose, .direction = "down") |>
+  mutate(milrinone_on=fcase(
+    dopa_dose>0 , 1,
+    (is.na(milrinone_dose) | milrinone_dose==0) , 0 )) |>
+  mutate(isoproterenol_dose=fcase(
+    med_category=="isoproterenol" , wt_dose
+  )) |>
+  fill(isoproterenol_dose, .direction = "down") |>
+  mutate(isoproterenol_on=fcase(
+    isoproterenol_dose>0 , 1,
+    (is.na(isoproterenol_dose) |isoproterenol_dose==0) , 0 )) |>
+  ungroup() |>
+  #See Lambden et al for Norepi dose equivalents for Epi, Phenyl, Vaso, Dopa, Angiotensin)
+  mutate(pressor_no=(norepi_on + epi_on + phenyl_on + vaso_on + dopa_on + angiotensin_on)) |>
+  #Norepi Equivalents: 1=1 low dose pressor, 2=1 moderate or high dose pressor, 3=2 or more pressors, 0 is 0 pressors
+   mutate(norepi_equivalent=case_when(
+      (norepi_dose<=0.15 | epi_dose <= 0.15 | 
+         phenyl_dose <= 1.5 | angiotensin_dose/100<=0.15) & pressor_no==1 ~ 1,
+      (norepi_dose> 0.15 | epi_dose > 0.15 | 
+         phenyl_dose > 1.5 | dopa_dose > 22 | angiotensin_dose/100>0.15) & pressor_no==1 ~ 2,
+      vaso_dose<=0.04 & pressor_no==1 ~ 1,
+      pressor_no > 1 ~ 2,
+      dopa_dose <= 22 & pressor_no==1 ~ 1,
+      pressor_no==0 ~ 0)) |>
+   #Now Select Max In this 12 Hour Period
+   group_by(patient_id, encounter_block) |>
+   mutate(max_norepi_equivalent=max(norepi_equivalent, na.rm = TRUE)) |>
+   filter(row_number()==1) |>
+   select(patient_id, encounter_block, max_norepi_equivalent) |>
+   ungroup()
+
 #Merge Files Together
-analytic_build <- hospitalization_vars |>
+prone_analytic_data <- hospitalization_vars |>
   left_join(demos) |>
+  left_join(hospital_location) |>
   left_join(bmi) |>
   left_join(prone_incidence_cohort) |>
+  left_join(min_pf) |>
+  left_join(norepi_equivalent) |>
+  #IF norepi equivalent is missing it means patient had no vasoactives recorded
+  mutate(max_norepi_equivalent=fifelse(is.na(max_norepi_equivalent), 0, max_norepi_equivalent)) |>
   select(-hospitalization_id) |>
-  #Race and ethnicity mappings: 1=white, non hispanic, 2=hispanic, regardless of race, 3=black non-hispanic, 4=asian, non-hispanic, 5=other (whether recorded as 'unkown' or 'other'). 
+  #Race and ethnicity mappings: 1=white, non hispanic, 2=hispanic, regardless of race, 3=black non-hispanic, 4=asian, non-hispanic, 5=other, 6=Unknown
   mutate(race_ethnicity=fcase(
     tolower(race_category)=="white" & 
-      tolower(ethnicity_category) %in% c('non-hispanic', 'unknown'), 'White, non-Hispanic',
+      tolower(ethnicity_category) %in% c('non-hispanic'), 'White, non-Hispanic',
     tolower(ethnicity_category)=='hispanic', 'Hispanic',
     tolower(race_category)=='black or african american' & 
-      tolower(ethnicity_category) %in% c('non-hispanic', 'unknown'), 'Black, non-Hispanic',
+      tolower(ethnicity_category) %in% c('non-hispanic'), 'Black, non-Hispanic',
     tolower(race_category)=='asian', 'Asian',
-    tolower(race_category) %!in% c('white', 'black or african american', 'asian'), 'other')) |>
+    tolower(race_category) %!in% c('white', 'black or african american', 'asian', 'unknown'), 'other',
+    tolower(race_category)=='unknown', 'unknown')) |>
   mutate(race_ethnicity) |>
-  select(-mode_category, -device_category)
-    
+  select(-mode_category, -device_category) |>
+  #Calculate Time from Admission to Enrollment
+  mutate(days_admit_to_enroll=as.duration(t_enrollment-final_admission_dttm)/ddays(1)) |>
+  #Calcualte Time from Enrollment to Proning
+  mutate(time_to_prone_hrs=fifelse(
+    proned==1, as.duration(first_prone_time-t_enrollment)/dhours(1), NaN)) |>
+  distinct()
+rm(bmi, demos, hospitalization_vars, hospital_location, min_pf, norepi_equivalent)
 
-
-
-
-
+write_parquet(prone_analytic_data, paste0(project_location, '/project_tables/prone_analytic_data.parquet'))
 ```
 
+```{r}
+## Export the list of `hospitalization_id` for the identified patients
+save(cohort_hospitalization_ids, file = paste0(project_location, "/project_tables/cohort_hospitalization_ids.RData"))
+```
 
+## Filter the CLIF tables for the identified hospitalizations
+```{r}
+filter_clif_table <- function(table, filter_col, cohort_ids, select_cols = NULL) {
+  filtered_table <- table %>%
+    filter(!!sym(filter_col) %in% cohort_ids) |>
+    collect()
+  
+  return(filtered_table)
+}
+
+#remove the patient table from the list of tables to filter
+table_flags["patient"] <- FALSE
+
+# Filter the required tables for the identified hospitalizations
+for (table_name in names(table_flags)[table_flags]) {
+  # Dynamically construct the full table name (e.g., "clif_labs", "clif_vitals")
+  full_table_name <- paste0("clif_", table_name)
+  
+  # Assign the filtered result to a new variable with "_cohort" suffix
+  assign(
+    paste0(full_table_name, "_cohort"), 
+    filter_clif_table(get(full_table_name), "hospitalization_id", cohort_hospitalization_ids$hospitalization_id)
+  )
+}
+
+# Filter the patient table for the identified patients
+clif_patient_cohort <- clif_patient |>
+  filter(patient_id %in% cohort_patient_ids$patient_id) |>
+  collect()
+```
+
+## Save all filtered tables to the `study_cohort` folder
+```{r}
+save(list = ls(pattern = "clif_.*_cohort"), 
+     file = paste0(project_location, "/project_tables/clif_cohort_tables.RData"))
+```
 
 
 ```{r End Time}
