@@ -1073,9 +1073,8 @@ min_pf <- vent_data |>
   join(temp_times, how = 'left') |>
   filter(as.POSIXct(recorded_dttm)>=as.POSIXct(vent_episode_start) &
            as.POSIXct(recorded_dttm)<=as.POSIXct(t_enrollment)) |>
-  group_by(patient_id) |>
-  mutate(keep=fifelse(
-    min(pf_ratio, na.rm = TRUE)==pf_ratio, 1, 0)) |>
+  group_by(patient_id, encounter_block) |>
+  mutate(min_pf_ratio=min(pf_ratio, na.rm = TRUE)) |>
   filter(row_number()==1) |>
   ungroup() |>
   select(patient_id, encounter_block, min_pf_ratio)
