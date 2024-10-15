@@ -637,9 +637,10 @@ vent_data <- clif_respiratory_support |>
   ungroup() |>
   #Bring in PaO2 Here and Then Fill Again
   join(pao2, how ='full') |>
-  fill(vent_episode_end, vent_episode_start, .direction = 'downup') |>
-  arrange(patient_id, encounter_block, recorded_dttm) |>  
   group_by(patient_id, encounter_block) |>
+  fill(vent_episode_end, vent_episode_start, .direction = 'downup') |>
+  filter(recorded_dttm>=as.POSIXct(vent_episode_start) & recorded_dttm<=as.POSIXct(vent_episode_end)) |>
+  arrange(patient_id, encounter_block, recorded_dttm) |>  
   fill(device_category, device_name, .direction = 'down') |>
   #Now Group by Patient/Encounter/device_category and fill peep and fio2
   group_by(patient_id, encounter_block, device_category) |>
@@ -1072,8 +1073,9 @@ min_pf <- vent_data |>
   join(temp_times, how = 'left') |>
   filter(as.POSIXct(recorded_dttm)>=as.POSIXct(vent_episode_start) &
            as.POSIXct(recorded_dttm)<=as.POSIXct(t_enrollment)) |>
-  group_by(patient_id, encounter_block) |>
-  mutate(min_pf_ratio=min(pf_ratio, na.rm = TRUE)) |>
+  group_by(patient_id) |>
+  mutate(keep=fifelse(
+    min(pf_ratio, na.rm = TRUE)==pf_ratio, 1, 0)) |>
   filter(row_number()==1) |>
   ungroup() |>
   select(patient_id, encounter_block, min_pf_ratio)
@@ -1251,7 +1253,7 @@ for (table_name in names(table_flags)[table_flags]) {
 
 # Filter the patient table for the identified patients
 clif_patient_cohort <- clif_patient |>
-  filter(patient_id %in% cohort_patient_ids$patient_id) |>
+  filter(patient_id %in% cohort_hospitalization_ids$patient_id) |>
   collect()
 ```
 
