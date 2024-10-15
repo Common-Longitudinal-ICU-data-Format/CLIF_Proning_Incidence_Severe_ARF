@@ -5,6 +5,25 @@ date: "`r Sys.Date()`"
 output: html_document
 ---
 
+#Specify File Paths, Project Path and Site - SITE SPECIFIC
+#Load the Required CLIF Tables (or if using ARROW/parquet refer to table in situ on storage drive)
+```{r}
+tables_location <- '~/workspace/Storage/chochbe1/JH_CCRD/CLIF/rclif'
+project_location <- '~/workspace/Storage/chochbe1/JH_CCRD/CLIF/CLIF_Projects/CLIF_prone_incidence'
+site <- "Hopkins"
+file_type <- 'parquet'
+
+#Create Sub Folders within Project Folder
+# Check if the output directory exists; if not, create it
+if (!dir.exists(paste0(project_location, "/project_tables"))) {
+  dir.create(paste0(project_location, "/project_tables"))
+}
+if (!dir.exists(paste0(project_location, "/project_output"))) {
+  dir.create(paste0(project_location, "/project_output"))
+}
+```
+
+
 ```{r Load Needed Libraries, include=FALSE}
 packages <- c("duckdb", "lubridate", "tidyverse", "dplyr","table1", "broom", "arrow", "rvest", "readr", "fst", "data.table", "collapse", "tictoc")
 
@@ -26,8 +45,6 @@ select <- dplyr::select
 ```{r Keep Track of HOw Long this Markdown Takes to Run, Can Potentially Identify Issues}
 tic()
 ```
-
-
 
 #Objective: identify a cohort of hospitalizations with patients who receive mechanical ventilation from CLIF tables
 Identify patients admitted to the hospital in a given date range. Export a list of `hospitalization_id` and filtered CLIF tables for the identified hospitalizations.
@@ -71,26 +88,7 @@ true_tables <- c("patient", "hospitalization", "adt",
 table_flags <- setNames(tables %in% true_tables, tables)
 ```
 
-#Specify File Paths, Project Path and Site - SITE SPECIFIC
-#Load the Required CLIF Tables (or if using ARROW/parquet refer to table in situ on storage drive)
-```{r}
-#tables_location <- '~/workspace/Storage/chochbe1/JH_CCRD/CLIF/rclif'
-#project_location <- '~/workspace/Storage/chochbe1/JH_CCRD/CLIF/CLIF_Projects/CLIF_prone_incidence'
-#site <- "Hopkins"
 
-tables_location<- 'Z:/barker/clif_temp'
-project_location<- 'Z:/barker/projects/CLIF_prone_incidence'
-file_type <- 'parquet'
-
-#Create Sub Folders within Project Folder
-# Check if the output directory exists; if not, create it
-if (!dir.exists(paste0(project_location, "/project_tables"))) {
-  dir.create(paste0(project_location, "/project_tables"))
-}
-if (!dir.exists(paste0(project_location, "/project_output"))) {
-  dir.create(paste0(project_location, "/project_output"))
-}
-```
 
 ```{r}
 # List all CLIF files in the directory
@@ -902,8 +900,124 @@ prone_incidence_cohort <- prone_incidence_cohort |>
   slice_sample(n=1) |>
   ungroup()
 
-
 cat('Of', n_patients, 'with eligible ventilator episodes in the ', site, 'data', length(unique(prone_incidence_cohort$patient_id)), 'met cohort eligibility based on PROSEVA and proning criteria and are included in the final cohort. \n')
+
+#Recalculate Final Cohort Ids
+cohort_ids <- prone_incidence_cohort |>
+  select(patient_id, hospitalization_id, encounter_block) |>
+  mutate(in_cohort=1)
+
+#Generate a Table of ALL HOspitalization IDs (here this Deals with the 'Linked' Encounters)
+temp <- cohort_ids |> select(patient_id, encounter_block, in_cohort)
+cohort_hospitalization_ids <- clif_hospitalization |>
+  left_join(temp) |>
+  filter(in_cohort==1) |>
+  select(patient_id, hospitalization_id, encounter_block, in_cohort) |>
+  collect()
+rm(temp)
+```
+
+```{r Add in Covariate, Vent Data, and Patient Outcomes}
+#Get Needed Variables from Hospitalization Tables
+#Age, Discharge Category, Final Admission Dttm, Final Discharge Dttm
+hospitalization_vars <- clif_hospitalization |>
+  left_join(cohort_ids) |>
+  filter(in_cohort==1) |>
+  select(patient_id, encounter_block, age_at_admission, final_admission_dttm, final_discharge_dttm, final_discharge_category) |>
+  collect() |>
+  mutate(in_hosp_death=fifelse(
+    final_discharge_category=='Expired', 1, 0
+  )) |>
+  mutate(death_or_hospice=fifelse(
+    final_discharge_category %in% c('Expired', 'Hospice'), 1, 0
+  )) 
+
+demos <- clif_patient |>
+  filter(patient_id %in% cohort_ids$patient_id) |>
+  collect()|>
+  #Need to Fix in JHU, but I have Patient Table with Individual Row for Each Hospitalization
+  #Code below addresses this but should be robust to sites that only have 1 row for each patient_id
+  group_by(patient_id) |>
+  filter(row_number()==n()) |>
+  select(patient_id, race_category, ethnicity_category, sex_category) |>
+  ungroup()
+
+#Will Use Cohort_ids, but Also a Table of Vent Times and t_enrollment
+temp <- hospitalization_vars |> select(patient_id, encounter_block, final_admission_dttm, final_discharge_dttm)
+cohort_times <- prone_incidence_cohort |>
+  select(patient_id, encounter_block, t_enrollment, vent_episode_start, vent_episode_end) |>
+  left_join(temp) 
+rm(temp)
+
+#Calculate BMI
+bmi <- clif_vitals |>
+  filter(vital_category %in% c('weight_kg', 'height_inches')) |>
+  filter(hospitalization_id %in% cohort_hospitalization_ids$hospitalization_id) |>
+  #Filter Outliers
+  filter((vital_category=='height_inches' & vital_value>=30 & vital_value<=96) |
+         (vital_category=='weight_kg' & vital_value>=20 & vital_value<=1100)) |>
+  collect() |>
+  join(cohort_hospitalization_ids, how = 'left') |>
+  join(cohort_times, how = 'left') |>
+  #Pick Height and Weight Closest to Enrollment
+  #First Calculate Time Difference
+  mutate(time_diff=as.duration(as.POSIXct(t_enrollment)-as.POSIXct(recorded_dttm))/dhours(1)) |>
+  #Define if Before or After t_entrollment
+  mutate(before_enrollment=fifelse(time_diff>=0, 1, 0)) |>
+  group_by(patient_id, encounter_block, before_enrollment, vital_category) |> #With this Grouping You keep Closest Before and After t_entrollment
+  mutate(keep=fifelse(
+    abs(time_diff)==min(abs(time_diff)), 1, 0
+  )) |>
+  filter(keep==1) |>
+  #Now Select Height/Weight (Preferrably This is Prior to Enrollment)
+  group_by(patient_id, encounter_block) |>
+  mutate(study_height_inches=fcase(
+    keep==1 & before_enrollment==1 & vital_category=='height_inches', vital_value
+  )) |>
+  mutate(study_weight_kg=fcase(
+      keep==1 & before_enrollment==1 & vital_category=='weight_kg', vital_value
+  )) |>
+  fill(study_height_inches, study_weight_kg, .direction = 'downup') |>
+  #IF missing Can Use First Value After Enrollment
+  mutate(study_height_inches=fifelse(
+    is.na(study_height_inches) & keep==1 & 
+      before_enrollment==0 & vital_category=='height_inches', 
+    vital_value, study_height_inches
+  )) |>
+  mutate(study_weight_kg=fifelse(
+     is.na(study_weight_kg) &  keep==1 & before_enrollment==0 & vital_category=='weight_kg', 
+     vital_value, study_weight_kg
+  )) |>
+  fill(study_height_inches, study_weight_kg, .direction = 'downup') |>
+  filter(row_number()==1) |>
+  ungroup() |>
+  #Calculate BMI
+  mutate(bmi=study_weight_kg/((study_height_inches/39.37)^2)) |>
+  select(patient_id, encounter_block, study_height_inches, study_weight_kg, bmi)
+
+#Merge Files Together
+analytic_build <- hospitalization_vars |>
+  left_join(demos) |>
+  left_join(bmi) |>
+  left_join(prone_incidence_cohort) |>
+  select(-hospitalization_id) |>
+  #Race and ethnicity mappings: 1=white, non hispanic, 2=hispanic, regardless of race, 3=black non-hispanic, 4=asian, non-hispanic, 5=other (whether recorded as 'unkown' or 'other'). 
+  mutate(race_ethnicity=fcase(
+    tolower(race_category)=="white" & 
+      tolower(ethnicity_category) %in% c('non-hispanic', 'unknown'), 'White, non-Hispanic',
+    tolower(ethnicity_category)=='hispanic', 'Hispanic',
+    tolower(race_category)=='black or african american' & 
+      tolower(ethnicity_category) %in% c('non-hispanic', 'unknown'), 'Black, non-Hispanic',
+    tolower(race_category)=='asian', 'Asian',
+    tolower(race_category) %!in% c('white', 'black or african american', 'asian'), 'other')) |>
+  mutate(race_ethnicity) |>
+  select(-mode_category, -device_category)
+    
+
+
+
+
+
 ```
 
 
