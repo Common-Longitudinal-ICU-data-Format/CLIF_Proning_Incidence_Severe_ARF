@@ -689,7 +689,7 @@ pf_table <- vent_data |>
     '% PROSEVA Eligible' = round(mean(n_proseva_eligible/n_pfs)*100, digits= 2)
   )
 pf_table
-write_csv(pf_table, paste0(project_location, "/project_output/pfratio_sample_size_", site, ".csv"))
+write_csv(pf_table, paste0(project_location, "/project_output/",site, "_pfratio_sample_size.csv"))
 rm(pf_table, pao2)
 ```
 
@@ -913,6 +913,8 @@ set.seed(32284) #For Reproducibility
 n_patients <- length(unique(prone_incidence_cohort$patient_id))
 prone_incidence_cohort <- prone_incidence_cohort |>
   filter(cohort_eligible==1) |>
+  #Filter Out Those with t_enrollment in 2024
+  filter(year(t_enrollment)<2024) |>
   #For patient_ids with more than one encounter block, select one at random
   group_by(patient_id) |>
   slice_sample(n=1) |>
@@ -1004,8 +1006,12 @@ hospital_location <- clif_adt |>
   group_by(patient_id, encounter_block) |>
   mutate(or_before_enrollment=max(or_before_enrollment, na.rm = TRUE)) |>
   ungroup() |>
-  filter(enrollment_icu==1) |>
-  select(patient_id, encounter_block, location_category, location_name, or_before_enrollment) |>
+  mutate(keep=fcase(
+    enrollment_icu==1, 1, 
+    max(enrollment_icu, na.rm=TRUE)==0 & row_number()==1, 1
+  )) |>
+  filter(keep==1) |>
+  select(patient_id, encounter_block, location_category, location_name, or_before_enrollment, hospital_id) |>
   rename(enrollment_location_category = location_category,
          enrollment_location_name = location_name)
 
