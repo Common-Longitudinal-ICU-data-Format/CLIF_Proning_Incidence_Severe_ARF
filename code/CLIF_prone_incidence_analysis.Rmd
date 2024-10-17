@@ -199,7 +199,6 @@ month_labels <- c(
 'Jan18', 'Feb18', 'Mar18','Apr18', 
 'May18', 'Jun18', 'Jul18', 'Aug18',
 'Sep18', 'Oct18', 'Nov18', 'Dec18',
-'Jan18', 'Feb18', 'Mar18','Apr18',
 'Jan19', 'Feb19', 'Mar19','Apr19', 
 'May19', 'Jun19', 'Jul19', 'Aug19',
 'Sep19', 'Oct19', 'Nov19', 'Dec19',
