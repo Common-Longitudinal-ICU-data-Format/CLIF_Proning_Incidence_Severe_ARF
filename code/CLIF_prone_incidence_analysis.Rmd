@@ -140,6 +140,26 @@ prone_per_month <- prone_analytic_df |>
   relocate(site, n_hospitals, .before = study_month)
 write_csv(prone_per_month, paste0(project_location, '/project_output/', site,'_prone_per_month.csv'))
 
+#Create a Table of N of Patients and Number Proned Per Study Month Per Hospital
+prone_per_month_by_hospital <- prone_analytic_df |> 
+  group_by(study_month, hospital_id) |>
+  summarise(
+    'site' = site,
+    'n_hospitals' = n_hospitals,
+    'year' = mean(year),
+    'calendar_month' = mean(calendar_month),
+    'study_period' = max(study_period),
+    'n_patients' = n(),
+    'n_proned_12_hr' = sum(prone_12hour_outcome),
+    'proned_12_hr_percent' = mean(prone_12hour_outcome),
+    'n_proned' = sum(proned),
+    'proned_percent' = mean(proned),
+    'standard_error' = sqrt(mean(prone_12hour_outcome) * (1 - mean(prone_12hour_outcome)) / n())
+  ) |>
+  relocate(site, n_hospitals, .before = study_month)
+write_csv(prone_per_month_by_hospital, paste0(project_location, '/project_output/', site,'_prone_per_month_hospital.csv'))
+
+
 #Repeat Per Study Period
 prone_per_period <- prone_analytic_df |> 
   group_by(study_period) |>
@@ -264,11 +284,27 @@ summary(tab1)
 # Stop saving output to the file
 sink() 
 
+#Now Create a Traditional Table 1, One Stratified by Period and One Stratified by Hospital
+tab1 <- CreateTableOne(vars = to_tab, strata="study_period", data=prone_analytic_df, factorVars = factors_tab, addOverall = TRUE) 
+print(tab1)
+tab1_excel <- as.data.frame(print(tab1, printToggle = FALSE, missing = TRUE)) |>
+  mutate(site = site) |>
+  relocate(site, .before = Overall) |>
+  rownames_to_column('characteristic') |>
+  rename(percent_missing = Missing) |>
+  select(-test)
+write.csv(tab1_excel, file=paste0(project_location, '/project_output/', site, '_Table1_by_Period.csv'))
+rm(tab1_excel)
 
 #Now Create a Traditional Table 1, One Stratified by Period and One Stratified by Hospital
-tab1 <- CreateTableOne(vars = to_tab, strata="hospital_id", data=prone_analytic_df, factorVars = factors_tab, addOverall = TRUE)
+tab1 <- CreateTableOne(vars = to_tab, strata="hospital_id", data=prone_analytic_df, factorVars = factors_tab, addOverall = TRUE) 
 print(tab1)
-tab1_excel <- print(tab1, printToggle = FALSE)
+tab1_excel <- as.data.frame(print(tab1, printToggle = FALSE, missing = TRUE)) |>
+  mutate(site = site) |>
+  relocate(site, .before = Overall) |>
+  rownames_to_column('characteristic') |>
+  rename(percent_missing = Missing) |>
+  select(-test)
 write.csv(tab1_excel, file=paste0(project_location, '/project_output/', site, '_Table1_by_Hospital.csv'))
 rm(tab1_excel)
 
@@ -334,10 +370,10 @@ ggsave(paste0(site, '_proning_by_quarter.pdf'),
 tool <- seq(min_month, max_month, by=2)
 new_month_labels <- site_month_labels[tool]
 base_plot <- ggplot(prone_per_month, aes(x=study_month, y=proned_12_hr_percent)) +
-  geom_point() +
-  geom_line() +
   geom_errorbar(aes(ymin = proned_12_hr_percent - standard_error, ymax = proned_12_hr_percent + standard_error), 
                 width = 0.1, alpha = 0.5, color = 'grey') +
+  geom_point() +
+  geom_line() +
   scale_y_continuous(breaks=seq(0,1, by=0.1), 
                      labels = scales::percent, 
                      limits = c(0,1.0),
@@ -377,45 +413,139 @@ ggsave(paste0(site, '_proning_by_month.pdf'),
 
 
 ```
+```{r Proning and Patient Outcomes in Table Form}
+to_tab <- c(
+  'prone_episodes',
+  'first_prone_episode_hours',
+  'median_pt_prone_duration',
+  'mean_pt_prone_duration',
+  'time_to_prone_hrs',
+  'in_hosp_death',
+  'death_or_hospice'
+)
+
+#Factor Variables
+factors_tab <- c(
+   'prone_12hour_outcome',
+  'proned',
+  'in_hosp_death',
+  'death_or_hospice'
+)
+
+#First Create Table with Ranges and Additional Statistics Including Numbers of Missing and Min/Max
+tab2 <- CreateTableOne(vars = to_tab, data=prone_analytic_df, factorVars = factors_tab)
+summary(tab2) #This will be in HTML File
+sink(paste0(project_location, '/project_output/', site, '_table2_missing_ranges.doc'))
+#Repeat to Create Word File
+summary(tab2)
+# Stop saving output to the file
+sink() 
+
+#Now Create a Traditional Table 1, One Stratified by Period and One Stratified by Hospital
+tab2 <- CreateTableOne(vars = to_tab, strata="study_period", data=prone_analytic_df, factorVars = factors_tab, addOverall = TRUE) 
+print(tab2)
+tab2_excel <- as.data.frame(print(tab1, printToggle = FALSE, missing = TRUE)) |>
+  mutate(site = site) |>
+  relocate(site, .before = Overall) |>
+  rownames_to_column('characteristic') |>
+  rename(percent_missing = Missing) |>
+  select(-test)
+write.csv(tab2_excel, file=paste0(project_location, '/project_output/', site, '_Table_Prone_Outcomes_Period.csv'))
+rm(tab2_excel)
+
+#Now Create a Traditional Table 1, One Stratified by Period and One Stratified by Hospital
+tab2 <- CreateTableOne(vars = to_tab, strata="hospital_id", data=prone_analytic_df, factorVars = factors_tab, addOverall = TRUE) 
+print(tab2)
+tab2_excel <- as.data.frame(print(tab1, printToggle = FALSE, missing = TRUE)) |>
+  mutate(site = site) |>
+  relocate(site, .before = Overall) |>
+  rownames_to_column('characteristic') |>
+  rename(percent_missing = Missing) |>
+  select(-test)
+write.csv(tab2_excel, file=paste0(project_location, '/project_output/', site, '_Table_Prone_Outcomes_Period.csv'))
+rm(tab2_excel)
+```
+
+```{r Function to Summarise glmmTB Model Objects}
+mixed_effect_summary <- function(model) {
+  model_summary <- summary(model)
+  coef_table <- model_summary$coefficients$cond  # Fixed effect coefficients
+ model_table <- data.frame(
+  'site' = site,
+  'n_observations' = model_summary$nobs,
+  'term' = rownames(coef_table),
+  'estimate' = coef_table[, "Estimate"],
+  'std_error' = coef_table[, "Std. Error"],
+  'p_value' = coef_table[, "Pr(>|z|)"],
+  'odds_ratio' = round(exp(coef_table[, "Estimate"]), 3),  # Exponentiated coefficients as Odds Ratios
+  'lower_bound' = exp(confint(model)[rownames(coef_table), 1]),  # Lower bound of CI
+  'upper_bound' = exp(confint(model)[rownames(coef_table), 2])   # Upper bound of CI
+)
+  
+model_table <- model_table |>
+  mutate(confidence_interval=paste0(round(lower_bound, 3), ' - ', round(upper_bound, 3))) |>
+  mutate(n_groups=model_summary$ngrps$cond[1]) |>
+  relocate(confidence_interval, .before = lower_bound) |>
+  relocate(n_groups, .after = n_observations)
+
+rownames(model_table) <- NULL
+model_table
+}
+```
+
 
 ```{r Segmented Regression - Univariable}
+#Mixed Effects Models with Hospital as Random Effect; Okay to Run Even if 1 Hospital in System As We Are Not Analyzing Hospital Level Effects (nuisance variable)
+#For now these are Logistic Regressions
 #This is the Model Form for Evaluating the Step Changes NOT taking Into Account Time Trends
-model_form_step <- prone_12hour_outcome ~ study_period
-if (n_hospitals>1) {
-  model_form_step <- prone_12hour_outcome ~ study_period + (1 | hospital_id)
-  unvar_mod <- glmmTMB(model_form_step,
+model_form_step <- prone_12hour_outcome ~ study_period + (1 | hospital_id)
+unvar_mod <- glmmTMB(model_form_step,
           data = prone_analytic_df, 
           family=binomial)
-} else {
-  model_form_step <- prone_12hour_outcome ~ study_period
-  unvar_mod <- glm(model_form_step,
-                   data = prone_analytic_df,
-                   family=binomial)
-}
-
 summary(unvar_mod)
-exp(confint(unvar_mod))
+unvar_mod_summary <- mixed_effect_summary(unvar_mod)
 
-#This is the Model Form for Evaluating the Step Chanegs AND Time Trends
-if (n_hospitals>1) {
-  model_form_step <- prone_12hour_outcome ~ study_period + study_period:study_month + (1 | hospital_id)
-  unvar_mod_interact <- glmmTMB(model_form_step,
+#This is the Model Form for Evaluating the Step Changes AND Time Trends
+#Will Scale STudy Month So Coefficients Tell Us About Change in Log Odds Per 3 month Change
+prone_analytic_df <- prone_analytic_df |>
+  mutate(month_scaled=study_month/3)
+model_form_step <- prone_12hour_outcome ~ study_period + study_period:month_scaled + (1 | hospital_id)
+unvar_mod_interact <- glmmTMB(model_form_step,
           data = prone_analytic_df, 
           family=binomial)
-} else {
-  model_form_step <- prone_12hour_outcome ~ study_period + study_period:study_month
-  unvar_mod_interact <- glm(model_form_step,
-                   data = prone_analytic_df,
-                   family=binomial)
-}
-
 summary(unvar_mod_interact)
-exp(confint(unvar_mod_interact))
+unvar_modinteract_summary <- mixed_effect_summary(unvar_mod_interact)
+
+final_table <- rowbind(unvar_mod_summary, data.frame('site'=c('','Model With Interaction Terms')), fill = TRUE) |>
+               rbind(unvar_modinteract_summary)
+# Write the table to a CSV file
+write.csv(final_table, paste0(project_location, '/project_output/', site, '_unadjusted_models.csv'))
 ```
 
 
 ```{r Adjusted Segmented Regression}
+model_form_step <- prone_12hour_outcome ~ study_period + age_at_admission + female + 
+  race_ethnicity + bmi + max_norepi_equivalent + or_before_enrollment + min_pf_ratio + (1 | hospital_id)
+multivar_mod <- glmmTMB(model_form_step,
+          data = prone_analytic_df, 
+          family=binomial)
+summary(multivar_mod)
+multivar_mod_summary <- mixed_effect_summary(multivar_mod)
 
+#This is the Model Form for Evaluating the Step Changes AND Time Trends
+#Will Scale STudy Month So Coefficients Tell Us About Change in Log Odds Per 3 month Change
+model_form_step <- prone_12hour_outcome ~ study_period + study_period:month_scaled + age_at_admission + female + 
+  race_ethnicity + bmi + max_norepi_equivalent + or_before_enrollment + min_pf_ratio + (1 | hospital_id)
+multivar_mod_interact <- glmmTMB(model_form_step,
+          data = prone_analytic_df, 
+          family=binomial)
+summary(multivar_mod_interact)
+multivar_modinteract_summary <- mixed_effect_summary(multivar_mod_interact)
+
+final_table <- rowbind(multivar_mod_summary, data.frame('site'=c('','Model With Interaction Terms')), fill = TRUE) |>
+               rbind(multivar_modinteract_summary)
+# Write the table to a CSV file
+write.csv(final_table, paste0(project_location, '/project_output/', site, '_adjusted_models.csv'))
 ```
 
 ```{r Adjusted Analysis Stratified by Hypoxemia Severity}
