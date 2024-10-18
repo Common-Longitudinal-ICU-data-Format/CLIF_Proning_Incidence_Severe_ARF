@@ -12,6 +12,12 @@ tables_location <- '~/workspace/Storage/chochbe1/JH_CCRD/CLIF/rclif'
 project_location <- '~/workspace/Storage/chochbe1/JH_CCRD/CLIF/CLIF_Projects/CLIF_prone_incidence'
 site <- "Hopkins"
 file_type <- 'parquet'
+
+
+#tables_location<- 'Z:/barker/clif_temp'
+#project_location<- 'Z:/barker/projects/CLIF_prone_incidence'
+#file_type <- 'parquet'
+#site <- "UMich"
 ```
 
 
