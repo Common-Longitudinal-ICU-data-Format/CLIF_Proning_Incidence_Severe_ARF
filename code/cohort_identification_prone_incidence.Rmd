@@ -1027,10 +1027,10 @@ demos <- clif_patient |>
 
 #Calculate BMI
 bmi <- clif_vitals |>
-  filter(vital_category %in% c('weight_kg', 'height_inches')) |>
+  filter(vital_category %in% c('weight_kg', 'height_cm')) |>
   filter(hospitalization_id %in% cohort_hospitalization_ids$hospitalization_id) |>
   #Filter Outliers
-  filter((vital_category=='height_inches' & vital_value>=30 & vital_value<=96) |
+  filter((vital_category=='height_cm' & vital_value>=76.2 & vital_value<=244) |
          (vital_category=='weight_kg' & vital_value>=20 & vital_value<=1100)) |>
   collect() |>
   join(cohort_hospitalization_ids, how = 'left') |>
@@ -1047,29 +1047,29 @@ bmi <- clif_vitals |>
   filter(keep==1) |>
   #Now Select Height/Weight (Preferrably This is Prior to Enrollment)
   group_by(patient_id, encounter_block) |>
-  mutate(study_height_inches=fcase(
-    keep==1 & before_enrollment==1 & vital_category=='height_inches', vital_value
+  mutate(study_height_cm=fcase(
+    keep==1 & before_enrollment==1 & vital_category=='height_cm', vital_value
   )) |>
   mutate(study_weight_kg=fcase(
       keep==1 & before_enrollment==1 & vital_category=='weight_kg', vital_value
   )) |>
-  fill(study_height_inches, study_weight_kg, .direction = 'downup') |>
+  fill(study_height_cm, study_weight_kg, .direction = 'downup') |>
   #IF missing Can Use First Value After Enrollment
-  mutate(study_height_inches=fifelse(
-    is.na(study_height_inches) & keep==1 & 
-      before_enrollment==0 & vital_category=='height_inches', 
-    vital_value, study_height_inches
+  mutate(study_height_cm=fifelse(
+    is.na(study_height_cm) & keep==1 & 
+      before_enrollment==0 & vital_category=='height_cm', 
+    vital_value, study_height_cm
   )) |>
   mutate(study_weight_kg=fifelse(
      is.na(study_weight_kg) &  keep==1 & before_enrollment==0 & vital_category=='weight_kg', 
      vital_value, study_weight_kg
   )) |>
-  fill(study_height_inches, study_weight_kg, .direction = 'downup') |>
+  fill(study_height_cm, study_weight_kg, .direction = 'downup') |>
   filter(row_number()==1) |>
   ungroup() |>
   #Calculate BMI
-  mutate(bmi=study_weight_kg/((study_height_inches/39.37)^2)) |>
-  select(patient_id, encounter_block, study_height_inches, study_weight_kg, bmi)
+  mutate(bmi=study_weight_kg/((study_height_cm/100)^2)) |>
+  select(patient_id, encounter_block, study_height_cm, study_weight_kg, bmi)
 
 #Lowest PF Between Time of Intubation and t_enrollment
 temp_times <- cohort_times |>

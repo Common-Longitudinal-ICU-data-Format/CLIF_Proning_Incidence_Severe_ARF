@@ -1,0 +1,69 @@
+
+     ### Summary of continuous variables ###
+
+strata: Overall
+                      n miss p.miss  mean    sd median  p25 p75  min  max skew  kurt
+age_at_admission   1113    0      0  59.6  15.9     62 50.0  71 18.0   97 -0.5  -0.3
+bmi                1113   16      1  32.5  10.8     31 25.6  37 12.1  105  1.9   7.0
+admit_to_enrolled  1113    0      0 110.1 211.0     47 24.3 114  5.8 3527  8.2 100.7
+ett_to_enrolled    1113    0      0  20.2   8.6     18 14.9  23  2.8   58  1.2   2.0
+min_pf_ratio       1113    0      0  80.4  23.2     78 62.0  97 41.0  139  0.4  -0.7
+first_proseva_peep 1113    0      0   8.8   3.7      8  5.0  12  5.0   22  0.6  -0.3
+first_proseva_fio2 1113    0      0   0.9   0.2      1  0.7   1  0.6    1 -0.9  -1.0
+
+=======================================================================================
+
+     ### Summary of categorical variables ### 
+
+strata: Overall
+                   var    n miss p.miss                             level freq percent cum.percent
+                female 1113    0    0.0                                 0  637    57.2        57.2
+                                                                        1  476    42.8       100.0
+                                                                                                  
+        race_ethnicity 1113   16    1.4                             Asian   46     4.2         4.2
+                                                      Black, non-Hispanic  349    31.8        36.0
+                                                                 Hispanic   85     7.7        43.8
+                                                                    other   37     3.4        47.1
+                                                                  unknown   10     0.9        48.0
+                                                      White, non-Hispanic  570    52.0       100.0
+                                                                                                  
+           hospital_id 1113    1    0.1                               BMC  292    26.3        26.3
+                                                                      HCG  150    13.5        39.7
+                                                                      JHH  586    52.7        92.4
+                                                                      SMH   32     2.9        95.3
+                                                                      SUB   52     4.7       100.0
+                                                                                                  
+                  year 1113    0    0.0                              2018  156    14.0        14.0
+                                                                     2019  152    13.7        27.7
+                                                                     2020  280    25.2        52.8
+                                                                     2021  231    20.8        73.6
+                                                                     2022  151    13.6        87.2
+                                                                     2023  143    12.8       100.0
+                                                                                                  
+          study_period 1113    0    0.0                             COVID  538    48.3        48.3
+                                                               Post-COVID  246    22.1        70.4
+                                                                Pre-COVID  329    29.6       100.0
+                                                                                                  
+   eligible_by_proseva 1113    0    0.0                                 0   78     7.0         7.0
+                                                                        1 1035    93.0       100.0
+                                                                                                  
+     eligible_by_prone 1113    0    0.0                                 0  876    78.7        78.7
+                                                                        1  237    21.3       100.0
+                                                                                                  
+  or_before_enrollment 1113    1    0.1                                 0  807    72.6        72.6
+                                                                        1  305    27.4       100.0
+                                                                                                  
+           severe_ards 1113    0    0.0                                 0  259    23.3        23.3
+                                                                        1  854    76.7       100.0
+                                                                                                  
+    first_proseva_mode 1113    9    0.8     Assist Control-Volume Control  740    67.0        67.0
+                                                                    Other    3     0.3        67.3
+                                                         Pressure Control   28     2.5        69.8
+                                                    Pressure Support/CPAP   33     3.0        72.8
+                                        Pressure-Regulated Volume Control  190    17.2        90.0
+                                                                     SIMV  110    10.0       100.0
+                                                                                                  
+ max_norepi_equivalent 1113    0    0.0                                 0  626    56.2        56.2
+                                                                        1  345    31.0        87.2
+                                                                        2  142    12.8       100.0
+                                                                                                  

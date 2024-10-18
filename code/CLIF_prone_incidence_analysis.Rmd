@@ -323,10 +323,10 @@ quarter_labels <- c(
 study_quarter_labels <- quarter_labels[min_quarter:max_quarter]
 
 base_plot <- ggplot(prone_per_quarter, aes(x=study_quarter, y=proned_12_hr_percent)) +
+  geom_errorbar(aes(ymin = proned_12_hr_percent - standard_error, ymax = proned_12_hr_percent + 
+                      standard_error), width = 0.1, alpha = 0.5, color = 'grey') +
   geom_point() +
   geom_line() +
-  geom_errorbar(aes(ymin = proned_12_hr_percent - standard_error, ymax = proned_12_hr_percent + standard_error), 
-                width = 0.1, alpha = 0.5, color = 'grey') +
   scale_y_continuous(breaks=seq(0,1, by=0.1), 
                      labels = scales::percent, 
                      limits = c(0,1.0),
@@ -443,7 +443,7 @@ sink()
 #Now Create a Traditional Table 1, One Stratified by Period and One Stratified by Hospital
 tab2 <- CreateTableOne(vars = to_tab, strata="study_period", data=prone_analytic_df, factorVars = factors_tab, addOverall = TRUE) 
 print(tab2)
-tab2_excel <- as.data.frame(print(tab1, printToggle = FALSE, missing = TRUE)) |>
+tab2_excel <- as.data.frame(print(tab2, printToggle = FALSE, missing = TRUE)) |>
   mutate(site = site) |>
   relocate(site, .before = Overall) |>
   rownames_to_column('characteristic') |>
@@ -455,7 +455,7 @@ rm(tab2_excel)
 #Now Create a Traditional Table 1, One Stratified by Period and One Stratified by Hospital
 tab2 <- CreateTableOne(vars = to_tab, strata="hospital_id", data=prone_analytic_df, factorVars = factors_tab, addOverall = TRUE) 
 print(tab2)
-tab2_excel <- as.data.frame(print(tab1, printToggle = FALSE, missing = TRUE)) |>
+tab2_excel <- as.data.frame(print(tab2, printToggle = FALSE, missing = TRUE)) |>
   mutate(site = site) |>
   relocate(site, .before = Overall) |>
   rownames_to_column('characteristic') |>
@@ -515,10 +515,10 @@ unvar_mod_interact <- glmmTMB(model_form_step,
 summary(unvar_mod_interact)
 unvar_modinteract_summary <- mixed_effect_summary(unvar_mod_interact)
 
-final_table <- rowbind(unvar_mod_summary, data.frame('site'=c('','Model With Interaction Terms')), fill = TRUE) |>
+univar_table <- rowbind(unvar_mod_summary, data.frame('site'=c('','Model With Interaction Terms')), fill = TRUE) |>
                rbind(unvar_modinteract_summary)
 # Write the table to a CSV file
-write.csv(final_table, paste0(project_location, '/project_output/', site, '_unadjusted_models.csv'))
+write.csv(univar_table, paste0(project_location, '/project_output/', site, '_unadjusted_models.csv'))
 ```
 
 
@@ -541,10 +541,68 @@ multivar_mod_interact <- glmmTMB(model_form_step,
 summary(multivar_mod_interact)
 multivar_modinteract_summary <- mixed_effect_summary(multivar_mod_interact)
 
-final_table <- rowbind(multivar_mod_summary, data.frame('site'=c('','Model With Interaction Terms')), fill = TRUE) |>
+multivar_table <- rowbind(multivar_mod_summary, data.frame('site'=c('','Model With Interaction Terms')), fill = TRUE) |>
                rbind(multivar_modinteract_summary)
 # Write the table to a CSV file
-write.csv(final_table, paste0(project_location, '/project_output/', site, '_adjusted_models.csv'))
+write.csv(multivar_table, paste0(project_location, '/project_output/', site, '_adjusted_models.csv'))
+```
+```{r Post HOC Analysis Analyzing Just Step Change at Transition to COVID Period With Rate of Change Prior and After}
+#For Sites with PRE-COVID Data They Will A STep Change From Pre-COVID to COVID and then analyze effect of time (in 3 month interval before and after this step change)
+#For Sites without Pre-COVID Data There is No Period Change and the Interest is in the Rate of Proning Decline Over the Study Period
+prone_analytic_df <- prone_analytic_df |>
+   mutate(covid_period=fcase(
+    study_month>=1 & study_month<27, 'Pre-COVID',
+    study_month>=27, 'COVID'
+  )) 
+
+#Only Sites with Pre-COVID Data Can Run this Analysis
+if (grepl('Pre-COVID', site_type)) {
+
+#First Univariable
+model_form_step <- prone_12hour_outcome ~ covid_period + covid_period:month_scaled + (1 | hospital_id)
+two_period_unvar <- glmmTMB(model_form_step,
+          data = prone_analytic_df, 
+          family=binomial)
+summary(two_period_unvar)
+two_period_unvar_sum <- mixed_effect_summary(two_period_unvar)
+
+model_form_step <- prone_12hour_outcome ~ covid_period + covid_period:month_scaled + age_at_admission + female + 
+  race_ethnicity + bmi + max_norepi_equivalent + or_before_enrollment + min_pf_ratio + (1 | hospital_id)
+two_period_multivar_mod <- glmmTMB(model_form_step,
+          data = prone_analytic_df, 
+          family=binomial)
+summary(two_period_multivar_mod)
+two_period_multivar_sum <- mixed_effect_summary(two_period_multivar_mod)
+
+two_period_table <- rowbind(two_period_unvar_sum, data.frame('site'=c('','Adjusted Model')), fill = TRUE) |>
+               rbind(two_period_multivar_sum)
+# Write the table to a CSV file
+write.csv(two_period_table, paste0(project_location, '/project_output/', site, 'two_period_models.csv'))
+
+
+} else { 
+#First Univariable
+model_form_step <- prone_12hour_outcome ~ month_scaled + (1 | hospital_id)
+two_period_unvar <- glmmTMB(model_form_step,
+          data = prone_analytic_df, 
+          family=binomial)
+summary(two_period_unvar)
+two_period_unvar_sum <- mixed_effect_summary(two_period_unvar)
+
+model_form_step <- prone_12hour_outcome ~ month_scaled + age_at_admission + female + 
+  race_ethnicity + bmi + max_norepi_equivalent + or_before_enrollment + min_pf_ratio + (1 | hospital_id)
+two_period_multivar_mod <- glmmTMB(model_form_step,
+          data = prone_analytic_df, 
+          family=binomial)
+summary(two_period_multivar_mod)
+two_period_multivar_sum <- mixed_effect_summary(two_period_multivar_mod)
+
+two_period_table <- rowbind(two_period_unvar_sum, data.frame('site'=c('','Adjusted Model')), fill = TRUE) |>
+               rbind(two_period_multivar_sum)
+# Write the table to a CSV file
+write.csv(two_period_table, paste0(project_location, '/project_output/', site, 'two_period_models.csv'))
+  }
+
 ```
 
 ```{r Adjusted Analysis Stratified by Hypoxemia Severity}
