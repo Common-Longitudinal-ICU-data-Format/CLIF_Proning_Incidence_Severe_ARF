@@ -24,8 +24,9 @@ packages <- c("lubridate",
               "arrow", 
               "collapse", 
               "data.table",
-              "glmmTMB",
-              "viridis") #Mixed Effects Modelling
+              "glmmTMB", #Mixed Effects Modelling
+              "viridis",
+              "performance") #This will allow us to grab the ICC from Hospital
 
 install_if_missing <- function(package) {
   if (!require(package, character.only = TRUE)) {
@@ -469,6 +470,7 @@ rm(tab2_excel)
 mixed_effect_summary <- function(model) {
   model_summary <- summary(model)
   coef_table <- model_summary$coefficients$cond  # Fixed effect coefficients
+  icc <- icc(model)
  model_table <- data.frame(
   'site' = site,
   'n_observations' = model_summary$nobs,
@@ -485,7 +487,13 @@ model_table <- model_table |>
   mutate(confidence_interval=paste0(round(lower_bound, 3), ' - ', round(upper_bound, 3))) |>
   mutate(n_groups=model_summary$ngrps$cond[1]) |>
   relocate(confidence_interval, .before = lower_bound) |>
-  relocate(n_groups, .after = n_observations)
+  relocate(n_groups, .after = n_observations) |>
+  mutate(hospital_icc_adjusted=fcase(
+    n_hospitals>1 & row_number()==1, round(icc$ICC_adjusted, digits = 3) 
+  )) |>
+  mutate(icc_note=fifelse(
+    is.na(hospital_icc_adjusted) & row_number()==1, 'ICC Did Not Run, May Be Only 1 Hospital', NA_character_
+  ))
 
 rownames(model_table) <- NULL
 model_table
