@@ -1611,7 +1611,7 @@ univar_table &lt;- rowbind(unvar_mod_summary, data.frame(&#39;site&#39;=c(&#39;&
 # Write the table to a CSV file
 write.csv(univar_table, paste0(project_location, &#39;/project_output/&#39;, site, &#39;_unadjusted_models.csv&#39;))</code></pre>
 <pre class="r"><code>model_form_step &lt;- prone_12hour_outcome ~ study_period + age_at_admission + female + 
-  race_ethnicity + bmi + max_norepi_equivalent + or_before_enrollment + min_pf_ratio + (1 | hospital_id)
+  race_ethnicity + bmi + factor(max_norepi_equivalent) + or_before_enrollment + min_pf_ratio + (1 | hospital_id)
 multivar_mod &lt;- glmmTMB(model_form_step,
           data = prone_analytic_df, 
           family=binomial)
@@ -1619,36 +1619,37 @@ summary(multivar_mod)</code></pre>
 <pre><code>##  Family: binomial  ( logit )
 ## Formula:          
 ## prone_12hour_outcome ~ study_period + age_at_admission + female +  
-##     race_ethnicity + bmi + max_norepi_equivalent + or_before_enrollment +  
+##     race_ethnicity + bmi + factor(max_norepi_equivalent) + or_before_enrollment +  
 ##     min_pf_ratio + (1 | hospital_id)
 ## Data: prone_analytic_df
 ## 
 ##      AIC      BIC   logLik deviance df.resid 
-##    957.4   1032.1   -463.7    927.4     1065 
+##    959.3   1039.1   -463.7    927.3     1064 
 ## 
 ## Random effects:
 ## 
 ## Conditional model:
 ##  Groups      Name        Variance Std.Dev.
-##  hospital_id (Intercept) 0.05371  0.2318  
+##  hospital_id (Intercept) 0.05382  0.232   
 ## Number of obs: 1080, groups:  hospital_id, 5
 ## 
 ## Conditional model:
 ##                                    Estimate Std. Error z value Pr(&gt;|z|)    
-## (Intercept)                        0.592556   0.675970   0.877   0.3807    
-## study_periodPost-COVID            -1.128597   0.228395  -4.941 7.76e-07 ***
-## study_periodPre-COVID             -2.094094   0.268883  -7.788 6.80e-15 ***
-## age_at_admission                  -0.006837   0.005481  -1.247   0.2122    
-## female                             0.301021   0.167720   1.795   0.0727 .  
-## race_ethnicityBlack, non-Hispanic -0.480696   0.403838  -1.190   0.2339    
-## race_ethnicityHispanic             0.093281   0.447987   0.208   0.8351    
-## race_ethnicityother               -0.029912   0.535057  -0.056   0.9554    
-## race_ethnicityunknown             -0.500528   1.189469  -0.421   0.6739    
-## race_ethnicityWhite, non-Hispanic -0.587802   0.393965  -1.492   0.1357    
-## bmi                               -0.008240   0.007960  -1.035   0.3006    
-## max_norepi_equivalent              0.231279   0.128982   1.793   0.0730 .  
-## or_before_enrollment              -2.062360   0.309558  -6.662 2.70e-11 ***
-## min_pf_ratio                      -0.001578   0.003788  -0.417   0.6769    
+## (Intercept)                        0.588942   0.676081   0.871   0.3837    
+## study_periodPost-COVID            -1.130668   0.228641  -4.945 7.61e-07 ***
+## study_periodPre-COVID             -2.092335   0.268968  -7.779 7.30e-15 ***
+## age_at_admission                  -0.006900   0.005486  -1.258   0.2085    
+## female                             0.299707   0.167825   1.786   0.0741 .  
+## race_ethnicityBlack, non-Hispanic -0.486905   0.404644  -1.203   0.2289    
+## race_ethnicityHispanic             0.087478   0.448568   0.195   0.8454    
+## race_ethnicityother               -0.038877   0.536533  -0.072   0.9422    
+## race_ethnicityunknown             -0.509366   1.189378  -0.428   0.6685    
+## race_ethnicityWhite, non-Hispanic -0.592831   0.394404  -1.503   0.1328    
+## bmi                               -0.008146   0.007970  -1.022   0.3067    
+## factor(max_norepi_equivalent)1     0.262256   0.188436   1.392   0.1640    
+## factor(max_norepi_equivalent)2     0.436477   0.283517   1.540   0.1237    
+## or_before_enrollment              -2.059172   0.309933  -6.644 3.05e-11 ***
+## min_pf_ratio                      -0.001561   0.003789  -0.412   0.6804    
 ## ---
 ## Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1 &#39; &#39; 1</code></pre>
 <pre class="r"><code>multivar_mod_summary &lt;- mixed_effect_summary(multivar_mod)
@@ -1656,7 +1657,7 @@ summary(multivar_mod)</code></pre>
 #This is the Model Form for Evaluating the Step Changes AND Time Trends
 #Will Scale STudy Month So Coefficients Tell Us About Change in Log Odds Per 3 month Change
 model_form_step &lt;- prone_12hour_outcome ~ study_period + study_period:month_scaled + age_at_admission + female + 
-  race_ethnicity + bmi + max_norepi_equivalent + or_before_enrollment + min_pf_ratio + (1 | hospital_id)
+  race_ethnicity + bmi + factor(max_norepi_equivalent) + or_before_enrollment + min_pf_ratio + (1 | hospital_id)
 multivar_mod_interact &lt;- glmmTMB(model_form_step,
           data = prone_analytic_df, 
           family=binomial)
@@ -1664,39 +1665,40 @@ summary(multivar_mod_interact)</code></pre>
 <pre><code>##  Family: binomial  ( logit )
 ## Formula:          
 ## prone_12hour_outcome ~ study_period + study_period:month_scaled +  
-##     age_at_admission + female + race_ethnicity + bmi + max_norepi_equivalent +  
+##     age_at_admission + female + race_ethnicity + bmi + factor(max_norepi_equivalent) +  
 ##     or_before_enrollment + min_pf_ratio + (1 | hospital_id)
 ## Data: prone_analytic_df
 ## 
 ##      AIC      BIC   logLik deviance df.resid 
-##    959.5   1049.2   -461.8    923.5     1062 
+##    961.4   1056.1   -461.7    923.4     1061 
 ## 
 ## Random effects:
 ## 
 ## Conditional model:
 ##  Groups      Name        Variance Std.Dev.
-##  hospital_id (Intercept) 0.05386  0.2321  
+##  hospital_id (Intercept) 0.05398  0.2323  
 ## Number of obs: 1080, groups:  hospital_id, 5
 ## 
 ## Conditional model:
 ##                                      Estimate Std. Error z value Pr(&gt;|z|)    
-## (Intercept)                          1.212874   0.869288   1.395  0.16294    
-## study_periodPost-COVID               1.390130   2.084026   0.667  0.50475    
-## study_periodPre-COVID               -2.370974   0.723558  -3.277  0.00105 ** 
-## age_at_admission                    -0.007037   0.005499  -1.280  0.20066    
-## female                               0.305540   0.168094   1.818  0.06911 .  
-## race_ethnicityBlack, non-Hispanic   -0.499137   0.406535  -1.228  0.21953    
-## race_ethnicityHispanic               0.026782   0.452502   0.059  0.95280    
-## race_ethnicityother                  0.038731   0.541544   0.072  0.94298    
-## race_ethnicityunknown               -0.470355   1.187054  -0.396  0.69193    
-## race_ethnicityWhite, non-Hispanic   -0.597693   0.396430  -1.508  0.13163    
-## bmi                                 -0.009317   0.008049  -1.158  0.24704    
-## max_norepi_equivalent                0.215308   0.129493   1.663  0.09637 .  
-## or_before_enrollment                -2.039122   0.310044  -6.577  4.8e-11 ***
-## min_pf_ratio                        -0.001683   0.003807  -0.442  0.65837    
-## study_periodCOVID:month_scaled      -0.043764   0.041147  -1.064  0.28751    
-## study_periodPost-COVID:month_scaled -0.152031   0.100432  -1.514  0.13009    
-## study_periodPre-COVID:month_scaled  -0.063017   0.102244  -0.616  0.53767    
+## (Intercept)                          1.207078   0.869635   1.388  0.16513    
+## study_periodPost-COVID               1.402912   2.085503   0.673  0.50114    
+## study_periodPre-COVID               -2.363001   0.724422  -3.262  0.00111 ** 
+## age_at_admission                    -0.007115   0.005505  -1.292  0.19620    
+## female                               0.303818   0.168220   1.806  0.07091 .  
+## race_ethnicityBlack, non-Hispanic   -0.506431   0.407320  -1.243  0.21375    
+## race_ethnicityHispanic               0.020069   0.453047   0.044  0.96467    
+## race_ethnicityother                  0.027989   0.543059   0.052  0.95890    
+## race_ethnicityunknown               -0.483396   1.187731  -0.407  0.68401    
+## race_ethnicityWhite, non-Hispanic   -0.603614   0.396853  -1.521  0.12826    
+## bmi                                 -0.009202   0.008059  -1.142  0.25351    
+## factor(max_norepi_equivalent)1       0.252735   0.189381   1.335  0.18203    
+## factor(max_norepi_equivalent)2       0.399587   0.284154   1.406  0.15965    
+## or_before_enrollment                -2.035088   0.310464  -6.555 5.56e-11 ***
+## min_pf_ratio                        -0.001664   0.003807  -0.437  0.66202    
+## study_periodCOVID:month_scaled      -0.043640   0.041150  -1.060  0.28892    
+## study_periodPost-COVID:month_scaled -0.152701   0.100511  -1.519  0.12870    
+## study_periodPre-COVID:month_scaled  -0.064008   0.102352  -0.625  0.53173    
 ## ---
 ## Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1 &#39; &#39; 1</code></pre>
 <pre class="r"><code>multivar_modinteract_summary &lt;- mixed_effect_summary(multivar_mod_interact)
@@ -1725,7 +1727,7 @@ summary(two_period_unvar)
 two_period_unvar_sum &lt;- mixed_effect_summary(two_period_unvar)
 
 model_form_step &lt;- prone_12hour_outcome ~ covid_period + covid_period:month_scaled + age_at_admission + female + 
-  race_ethnicity + bmi + max_norepi_equivalent + or_before_enrollment + min_pf_ratio + (1 | hospital_id)
+  race_ethnicity + bmi + factor(max_norepi_equivalent) + or_before_enrollment + min_pf_ratio + (1 | hospital_id)
 two_period_multivar_mod &lt;- glmmTMB(model_form_step,
           data = prone_analytic_df, 
           family=binomial)
@@ -1748,7 +1750,7 @@ summary(two_period_unvar)
 two_period_unvar_sum &lt;- mixed_effect_summary(two_period_unvar)
 
 model_form_step &lt;- prone_12hour_outcome ~ month_scaled + age_at_admission + female + 
-  race_ethnicity + bmi + max_norepi_equivalent + or_before_enrollment + min_pf_ratio + (1 | hospital_id)
+  race_ethnicity + bmi + factor(max_norepi_equivalent) + or_before_enrollment + min_pf_ratio + (1 | hospital_id)
 two_period_multivar_mod &lt;- glmmTMB(model_form_step,
           data = prone_analytic_df, 
           family=binomial)
