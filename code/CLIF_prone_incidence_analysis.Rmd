@@ -557,7 +557,7 @@ write.csv(univar_table, paste0(project_location, '/project_output/', site, '_una
 
 ```{r Adjusted Segmented Regression}
 model_form_step <- prone_12hour_outcome ~ study_period + age_at_admission + female + 
-  race_ethnicity + bmi + max_norepi_equivalent + or_before_enrollment + min_pf_ratio + (1 | hospital_id)
+  race_ethnicity + bmi + factor(max_norepi_equivalent) + or_before_enrollment + min_pf_ratio + (1 | hospital_id)
 multivar_mod <- glmmTMB(model_form_step,
           data = prone_analytic_df, 
           family=binomial)
@@ -567,7 +567,7 @@ multivar_mod_summary <- mixed_effect_summary(multivar_mod)
 #This is the Model Form for Evaluating the Step Changes AND Time Trends
 #Will Scale STudy Month So Coefficients Tell Us About Change in Log Odds Per 3 month Change
 model_form_step <- prone_12hour_outcome ~ study_period + study_period:month_scaled + age_at_admission + female + 
-  race_ethnicity + bmi + max_norepi_equivalent + or_before_enrollment + min_pf_ratio + (1 | hospital_id)
+  race_ethnicity + bmi + factor(max_norepi_equivalent) + or_before_enrollment + min_pf_ratio + (1 | hospital_id)
 multivar_mod_interact <- glmmTMB(model_form_step,
           data = prone_analytic_df, 
           family=binomial)
@@ -603,7 +603,7 @@ summary(two_period_unvar)
 two_period_unvar_sum <- mixed_effect_summary(two_period_unvar)
 
 model_form_step <- prone_12hour_outcome ~ covid_period + covid_period:month_scaled + age_at_admission + female + 
-  race_ethnicity + bmi + max_norepi_equivalent + or_before_enrollment + min_pf_ratio + (1 | hospital_id)
+  race_ethnicity + bmi + factor(max_norepi_equivalent) + or_before_enrollment + min_pf_ratio + (1 | hospital_id)
 two_period_multivar_mod <- glmmTMB(model_form_step,
           data = prone_analytic_df, 
           family=binomial)
@@ -626,7 +626,7 @@ summary(two_period_unvar)
 two_period_unvar_sum <- mixed_effect_summary(two_period_unvar)
 
 model_form_step <- prone_12hour_outcome ~ month_scaled + age_at_admission + female + 
-  race_ethnicity + bmi + max_norepi_equivalent + or_before_enrollment + min_pf_ratio + (1 | hospital_id)
+  race_ethnicity + bmi + factor(max_norepi_equivalent) + or_before_enrollment + min_pf_ratio + (1 | hospital_id)
 two_period_multivar_mod <- glmmTMB(model_form_step,
           data = prone_analytic_df, 
           family=binomial)
