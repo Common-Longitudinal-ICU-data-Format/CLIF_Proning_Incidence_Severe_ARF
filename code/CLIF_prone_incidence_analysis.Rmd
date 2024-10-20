@@ -470,7 +470,7 @@ rm(tab2_excel)
 mixed_effect_summary <- function(model) {
   model_summary <- summary(model)
   coef_table <- model_summary$coefficients$cond  # Fixed effect coefficients
-  icc <- icc(model)
+  
  model_table <- data.frame(
   'site' = site,
   'n_observations' = model_summary$nobs,
@@ -487,16 +487,41 @@ model_table <- model_table |>
   mutate(confidence_interval=paste0(round(lower_bound, 3), ' - ', round(upper_bound, 3))) |>
   mutate(n_groups=model_summary$ngrps$cond[1]) |>
   relocate(confidence_interval, .before = lower_bound) |>
-  relocate(n_groups, .after = n_observations) |>
-  mutate(hospital_icc_adjusted=fcase(
-    n_hospitals>1 & row_number()==1, round(icc$ICC_adjusted, digits = 3) 
-  )) |>
-  mutate(icc_note=fifelse(
-    is.na(hospital_icc_adjusted) & row_number()==1, 'ICC Did Not Run, May Be Only 1 Hospital', NA_character_
-  ))
+  relocate(n_groups, .after = n_observations) 
 
-rownames(model_table) <- NULL
-model_table
+if (model_summary$ngrps$cond[1]> 1) {
+  random_effects <- VarCorr(model) #Extract Information on Random Effects
+  icc <- icc(model) #Extract ICC of the Hospitals
+  
+ model_table <- model_table |>
+  mutate(random_intercept_sd=fcase(
+    row_number()==1, attr(random_effects$cond$hospital_id, "stddev")["(Intercept)"]
+  )) |>
+  mutate(median_odds_ratio=exp(0.954 * random_intercept_sd)) |>
+  mutate(hospital_icc_adjusted=fcase(
+    row_number()==1, round(icc$ICC_adjusted, digits = 3) 
+  )) |>
+  mutate(note=fifelse(
+    is.na(hospital_icc_adjusted) & is.na(random_intercept_sd) & row_number()==1, 'Random Effect Intercept Variance, not Included, May Be Only 1 Hospital', NA_character_
+  ))
+  rownames(model_table) <- NULL
+  model_table
+ 
+} else {
+ # If there's only one hospital, no random effect variance
+  model_table <- model_table |>
+      mutate(random_intercept_sd = NaN) |>
+      mutate(median_odds_ratio= NaN) |>
+      mutate(hospital_icc_adjusted = NaN) |>
+      mutate(note = ifelse(
+        row_number() == 1,
+        'Random Effect Intercept Variance not Included, May Be Only 1 Hospital',
+        NA_character_
+      ))
+  rownames(model_table) <- NULL
+  model_table
+}
+return(model_table)
 }
 ```
 
@@ -554,6 +579,9 @@ multivar_table <- rowbind(multivar_mod_summary, data.frame('site'=c('','Model Wi
 # Write the table to a CSV file
 write.csv(multivar_table, paste0(project_location, '/project_output/', site, '_adjusted_models.csv'))
 ```
+
+
+
 ```{r Post HOC Analysis Analyzing Just Step Change at Transition to COVID Period With Rate of Change Prior and After}
 #For Sites with PRE-COVID Data They Will A STep Change From Pre-COVID to COVID and then analyze effect of time (in 3 month interval before and after this step change)
 #For Sites without Pre-COVID Data There is No Period Change and the Interest is in the Rate of Proning Decline Over the Study Period
