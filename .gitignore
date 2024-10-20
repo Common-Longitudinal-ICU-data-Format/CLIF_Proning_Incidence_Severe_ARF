@@ -1,2 +1,4 @@
 .DS_Store
-Output/
+output/
+project_output/
+project_tables/
