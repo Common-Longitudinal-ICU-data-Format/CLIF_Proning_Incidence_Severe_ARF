@@ -8,11 +8,14 @@ output: html_document
 #Specify File Paths, Project Path and Site - SITE SPECIFIC
 #Load the Required CLIF Tables (or if using ARROW/parquet refer to table in situ on storage drive)
 ```{r}
-tables_location <- '~/workspace/Storage/chochbe1/JH_CCRD/CLIF/rclif'
-project_location <- '~/workspace/Storage/chochbe1/JH_CCRD/CLIF/CLIF_Projects/CLIF_prone_incidence'
-site <- "Hopkins"
+#tables_location <- '~/workspace/Storage/chochbe1/JH_CCRD/CLIF/rclif'
+#project_location <- '~/workspace/Storage/chochbe1/JH_CCRD/CLIF/CLIF_Projects/CLIF_prone_incidence'
+#site <- "Hopkins"
 file_type <- 'parquet'
 
+tables_location <- 'z:/barker/clif_temp'
+project_location <- 'z:/barker/projects/CLIF_prone_incidence'
+site <- "UMich"
 #Create Sub Folders within Project Folder
 # Check if the output directory exists; if not, create it
 if (!dir.exists(paste0(project_location, "/project_tables"))) {
@@ -262,7 +265,6 @@ clif_hospitalization <- clif_hospitalization |>
        .direction = 'updown') |>
   relocate(encounter_block, .after = 'hospitalization_id') |>
   as_arrow_table()
-
 
 rm(linked_encounters, df_link, hospital_blocks)
 
@@ -661,7 +663,8 @@ vent_data <- clif_respiratory_support |>
 #Indicate if 'proseva_eligible'
 vent_data <- vent_data |>
   mutate(fio2_set=fifelse(
-    fio2_set<0.21 | fio2_set>1, NaN, fio2_set)) |>
+  #  fio2_set<0.21 | fio2_set>1, NaN, fio2_set)) |>
+     fio2_set<21 | fio2_set>100, NaN, fio2_set/100)) |>
   mutate(peep_set=fifelse(
     peep_set<0 | peep_set>35, NaN, peep_set)) |>
   #Now Calculate PF Ratios
@@ -698,9 +701,9 @@ rm(pf_table, pao2)
 proseva_criteria <- vent_data |>
   filter(!is.na(pf_ratio)) |>
   #Filter to First 72 Hours After Vent Start
-  filter(recorded_dttm<=as.POSIXct(vent_episode_start)+dhours(72)) |>
+  filter(recorded_dttm<=as.POSIXct(vent_episode_start, tz="UTC")+dhours(72)) |>
   mutate(temp_proseva_time=fifelse(
-    proseva_eligible==1 & recorded_dttm<=as.POSIXct(vent_episode_start)+dhours(36), 1, 0
+    proseva_eligible==1 & recorded_dttm<=as.POSIXct(vent_episode_start, tz="UTC")+dhours(36), 1, 0
   )) |>
   group_by(patient_id, encounter_block, temp_proseva_time, proseva_eligible) |> #By grouping together can define the 1st PF ratios that Meet PROSEVA criteria
   arrange(patient_id, encounter_block, recorded_dttm) |>
@@ -733,8 +736,8 @@ proseva_criteria <- vent_data |>
   #Now Repeat For The 2nd Eligible Time - Must be within 12-24 Hours t_proseva_first
   #This Table is Already Windowed to First 72 Hours of Vent and Ends When patient is extubated/dies/transfers (if before 72 hours)
   mutate(eligible_proseva_t2=fifelse(
-    recorded_dttm>=as.POSIXct(t_proseva_first)+dhours(12) & 
-    recorded_dttm<=as.POSIXct(t_proseva_first)+dhours(24), 1, 0
+    recorded_dttm>=as.POSIXct(t_proseva_first, tz="UTC")+dhours(12) & 
+    recorded_dttm<=as.POSIXct(t_proseva_first, tz="UTC")+dhours(24), 1, 0
   )) |>
   group_by(patient_id, encounter_block, eligible_proseva_t2, proseva_eligible) |>
   arrange(patient_id, encounter_block, recorded_dttm) |>
@@ -788,8 +791,8 @@ prone_episodes <- clif_position |>
   select(-in_cohort) |>
   left_join(temp_times) |>
   collect() |>
-  mutate(recorded_dttm=as.POSIXct(recorded_dttm)) |>
-  filter(recorded_dttm>=as.POSIXct(vent_episode_start) & recorded_dttm<=as.POSIXct(vent_episode_end)) |>
+  mutate(recorded_dttm=as.POSIXct(recorded_dttm, tz="UTC")) |>
+  filter(recorded_dttm>=as.POSIXct(vent_episode_start, tz="UTC") & recorded_dttm<=as.POSIXct(vent_episode_end, tz="UTC")) |>
   #Filter to Rows Where 'position_category' changes --> This will allow some institutions to select 'all positions' and some to only keep rows where position changes (as I did in my CLIF ETL)
   group_by(patient_id, encounter_block) |>
   arrange(patient_id, encounter_block, recorded_dttm) |>
@@ -844,7 +847,7 @@ prone_episodes <- clif_position |>
     prone_episode_num==1, prone_episode_hours
   )) |>
   mutate(first_prone_time=fcase(
-    prone_episode_num==1, as.POSIXct(recorded_dttm)
+    prone_episode_num==1, as.POSIXct(recorded_dttm, tz="UTC")
   )) |>
   mutate(median_pt_prone_duration=median(prone_episode_hours)) |>
   mutate(mean_pt_prone_duration=mean(prone_episode_hours)) |>
@@ -1174,22 +1177,22 @@ norepi_equivalent <- clif_medication_admin_continuous |>
     (is.na(isoproterenol_dose) |isoproterenol_dose==0) , 0 )) |>
   ungroup() |>
   #See Lambden et al for Norepi dose equivalents for Epi, Phenyl, Vaso, Dopa, Angiotensin)
-  mutate(pressor_no=(norepi_on + epi_on + phenyl_on + vaso_on + dopa_on + angiotensin_on)) |>
+  mutate(pressor_on=(norepi_on + epi_on + phenyl_on + vaso_on + dopa_on + angiotensin_on)) |>
   #Norepi Equivalents: 1=1 low dose pressor, 2=1 moderate or high dose pressor, 3=2 or more pressors, 0 is 0 pressors
-   mutate(norepi_equivalent=case_when(
-      (norepi_dose<=0.15 | epi_dose <= 0.15 | 
-         phenyl_dose <= 1.5 | angiotensin_dose/100<=0.15) & pressor_no==1 ~ 1,
-      (norepi_dose> 0.15 | epi_dose > 0.15 | 
-         phenyl_dose > 1.5 | dopa_dose > 22 | angiotensin_dose/100>0.15) & pressor_no==1 ~ 2,
-      vaso_dose<=0.04 & pressor_no==1 ~ 1,
-      pressor_no > 1 ~ 2,
-      dopa_dose <= 22 & pressor_no==1 ~ 1,
-      pressor_no==0 ~ 0)) |>
+   mutate(norepi_equivalent=case_when( #norepi_dose + epi_dose+ vaso_dose*2.5/60+ angiotensin_dose/100+ dopa_dose/100+ phenyl_dose/10)|>
+       (norepi_dose<=0.15 | epi_dose <= 0.15 | 
+          phenyl_dose <= 1.5 | angiotensin_dose/100<=0.15) & pressor_on==1 ~ 1,
+       (norepi_dose> 0.15 | epi_dose > 0.15 | 
+          phenyl_dose > 1.5 | dopa_dose > 22 | angiotensin_dose/100>0.15) & pressor_on==1 ~ 2,
+       (vaso_dose<=0.04 | vaso_dose/60 <=0.04) & pressor_on==1 ~ 1,
+       pressor_on > 1 ~ 2,
+       dopa_dose <= 22 & pressor_on==1 ~ 1,
+       pressor_on==0 ~ 0)) |>
    #Now Select Max In this 12 Hour Period
    group_by(patient_id, encounter_block) |>
    mutate(max_norepi_equivalent=max(norepi_equivalent, na.rm = TRUE)) |>
    filter(row_number()==1) |>
-   select(patient_id, encounter_block, max_norepi_equivalent) |>
+   select(patient_id, encounter_block, max_norepi_equivalent, norepi_dose, epi_dose, vaso_dose, angiotensin_dose, dopa_dose, phenyl_dose) |>
    ungroup()
 
 #Merge Files Together
