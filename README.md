@@ -59,32 +59,13 @@ ii.	OPTION B: Use admission_category!=’Transfer’ [syntax not yet in CLIF]
 ## Detailed Instructions for running the project
 
 ## 1. Setup Project Environment
-Describe the steps to setup the project environment. 
+All Packages are coded into the cohort_identification and analysis scripts and can be run in an RStudio. 
 
-Example for R:
-```
-# Setup R environment using renv
-# Install renv if not already installed:
-if (!requireNamespace("renv", quietly = TRUE)) install.packages("renv")
-# Initialize renv for the project:
-renv::init()
-# Install required packages:
-renv::install(c("knitr", "here", "tidyverse", "arrow", "gtsummary"))
-# Save the project's package state:
-renv::snapshot()
-```
+## 2. Run code
+Can run both scripts as R markdown files with the 'knit' function in R
+1. Run cohort_identification script
+2. Run analysis script
 
-Example for Python:
-```
-python3 -m venv .mobilization
-source .mobilization/bin/activate
-pip install -r requirements.txt 
-```
-
-## 2. Update `config/config.json`
-Follow instructions in the [config/README.md](config/README.md) file for detailed configuration steps.
-
-## 3. Run code
 Detailed instructions on the code workflow are provided in the [code directory](code/README.md)
 
 
