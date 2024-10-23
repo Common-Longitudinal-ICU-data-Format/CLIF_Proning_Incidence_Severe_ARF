@@ -663,8 +663,8 @@ vent_data <- clif_respiratory_support |>
 #Indicate if 'proseva_eligible'
 vent_data <- vent_data |>
   mutate(fio2_set=fifelse(
-  #  fio2_set<0.21 | fio2_set>1, NaN, fio2_set)) |>
-     fio2_set<21 | fio2_set>100, NaN, fio2_set/100)) |>
+    fio2_set<0.21 | fio2_set>1, NaN, fio2_set)) |>
+  #   fio2_set<21 | fio2_set>100, NaN, fio2_set/100)) |>
   mutate(peep_set=fifelse(
     peep_set<0 | peep_set>35, NaN, peep_set)) |>
   #Now Calculate PF Ratios
