@@ -305,6 +305,7 @@ write.csv(tab1_excel, file=paste0(project_location, '/project_output/', site, '_
 rm(tab1_excel)
 
 #Now Create a Traditional Table 1, One Stratified by Period and One Stratified by Hospital
+if (n_hospitals>1) {
 tab1 <- CreateTableOne(vars = to_tab, strata="hospital_id", data=prone_analytic_df, factorVars = factors_tab, addOverall = TRUE) 
 print(tab1)
 tab1_excel <- as.data.frame(print(tab1, printToggle = FALSE, missing = TRUE)) |>
@@ -313,10 +314,19 @@ tab1_excel <- as.data.frame(print(tab1, printToggle = FALSE, missing = TRUE)) |>
   rownames_to_column('characteristic') |>
   rename(percent_missing = Missing) |>
   select(-test)
+}
+else {
+tab1 <- CreateTableOne(vars = to_tab, data=prone_analytic_df, factorVars = factors_tab, addOverall = TRUE) 
+print(tab1)
+tab1_excel <- as.data.frame(print(tab1, printToggle = FALSE, missing = TRUE)) |>
+  mutate(site = site) |>
+  relocate(site, .before = Overall) |>
+  rownames_to_column('characteristic') |>
+  rename(percent_missing = Missing) |>
+  select(-test)
+}
 write.csv(tab1_excel, file=paste0(project_location, '/project_output/', site, '_Table1_by_Hospital.csv'))
 rm(tab1_excel)
-
-
 
 ```
 
@@ -507,8 +517,6 @@ extended
 ggsave(paste0(site, '_proning_by_month_alltime.pdf'),
        path = paste0(project_location, '/project_output/graphs/'))
 
-
-
 ```
 ```{r Proning and Patient Outcomes in Table Form}
 to_tab <- c(
@@ -551,6 +559,7 @@ write.csv(tab2_excel, file=paste0(project_location, '/project_output/', site, '_
 rm(tab2_excel)
 
 #Now Create a Traditional Table 1, One Stratified by Period and One Stratified by Hospital
+if (n_hospitals>1) {
 tab2 <- CreateTableOne(vars = to_tab, strata="hospital_id", data=prone_analytic_df, factorVars = factors_tab, addOverall = TRUE) 
 print(tab2)
 tab2_excel <- as.data.frame(print(tab2, printToggle = FALSE, missing = TRUE)) |>
@@ -559,6 +568,16 @@ tab2_excel <- as.data.frame(print(tab2, printToggle = FALSE, missing = TRUE)) |>
   rownames_to_column('characteristic') |>
   rename(percent_missing = Missing) |>
   select(-test)
+} else {
+tab2 <- CreateTableOne(vars = to_tab, data=prone_analytic_df, factorVars = factors_tab, addOverall = TRUE) 
+print(tab2)
+tab2_excel <- as.data.frame(print(tab2, printToggle = FALSE, missing = TRUE)) |>
+  mutate(site = site) |>
+  relocate(site, .before = Overall) |>
+  rownames_to_column('characteristic') |>
+  rename(percent_missing = Missing) |>
+  select(-test)
+}
 write.csv(tab2_excel, file=paste0(project_location, '/project_output/', site, '_Table_Prone_Outcomes_Period.csv'))
 rm(tab2_excel)
 ```
