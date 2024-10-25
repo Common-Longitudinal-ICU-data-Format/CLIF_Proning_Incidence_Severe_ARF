@@ -54,7 +54,7 @@ ii.	OPTION B: Use admission_category!=’Transfer’ [syntax not yet in CLIF]
 3. Will output prone_outcomes.csv table that includes site-specific aggregate proning cohort data per month.
 4. Will output results of regression models, for use in aggregative cross-federation analysis.  
 
- The final project results should be saved in the [`output/final`](output/README.md) directory.
+ The final project results should be saved in the UChicago box folder. 
 
 ## Detailed Instructions for running the project
 
@@ -63,8 +63,9 @@ All Packages are coded into the cohort_identification and analysis scripts and c
 
 ## 2. Run code
 Can run both scripts as R markdown files with the 'knit' function in R
-1. Run cohort_identification script
-2. Run analysis script
+1. Run cohort_identification_prone_incidence.Rmd script to define the ARF cohort. 
+2. Run analysis script CLIF_prone_incidence_analysis_FixedEffects.Rmd to perform analysis and generate output. 
+*** Note: This is the Fixed Effects version, NOT the version entitled CLIF_prone_incidence_analysis. 
 
 Detailed instructions on the code workflow are provided in the [code directory](code/README.md)
 
