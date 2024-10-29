@@ -8,13 +8,13 @@ output: html_document
 #Specify File Paths, Project Path and Site - SITE SPECIFIC
 #Load the Analytic File
 ```{r}
-tables_location <- '~/workspace/Storage/chochbe1/JH_CCRD/CLIF/rclif'
-project_location <- '~/workspace/Storage/chochbe1/JH_CCRD/CLIF/CLIF_Projects/CLIF_prone_incidence'
-site <- "Hopkins"
+#tables_location <- '~/workspace/Storage/chochbe1/JH_CCRD/CLIF/rclif'
+#project_location <- '~/workspace/Storage/chochbe1/JH_CCRD/CLIF/CLIF_Projects/CLIF_prone_incidence'
+#site <- "Hopkins"
 file_type <- 'parquet'
-#tables_location <- 'z:/barker/clif_temp'
-#project_location <- 'z:/barker/projects/CLIF_prone_incidence'
-#site <- "UMich"
+tables_location <- 'z:/barker/clif_temp'
+project_location <- 'z:/barker/projects/CLIF_prone_incidence'
+site <- "UMich"
 ```
 
 
@@ -137,10 +137,16 @@ prone_per_month <- prone_analytic_df |>
     'n_patients' = n(),
     'n_proned_12_hr' = sum(prone_12hour_outcome),
     'proned_12_hr_percent' = mean(prone_12hour_outcome),
-    'n_proned' = sum(proned),
-    'proned_percent' = mean(proned),
-    'standard_error' = sqrt(mean(prone_12hour_outcome) * (1 - mean(prone_12hour_outcome)) / n()),
-    'standard_error_alltime' = sqrt(mean(proned) * (1 - mean(proned)) / n())
+    'standard_error_12' = sqrt(mean(prone_12hour_outcome) * (1 - mean(prone_12hour_outcome)) / n()),
+    'n_proned_24_hr' = sum(prone_24hour_outcome),
+    'proned_24_hr_percent' = mean(prone_24hour_outcome),
+    'standard_error_24' = sqrt(mean(prone_24hour_outcome) * (1 - mean(prone_24hour_outcome)) / n()),
+    'n_proned_72_hr' = sum(prone_72hour_outcome),
+    'proned_72_hr_percent' = mean(prone_72hour_outcome),
+    'standard_error_72' = sqrt(mean(prone_72hour_outcome) * (1 - mean(prone_72hour_outcome)) / n()),
+    'n_proned_all' = sum(proned),
+    'proned_percent_all' = mean(proned),
+    'standard_error_all' = sqrt(mean(proned) * (1 - mean(proned)) / n())
   ) |>
   relocate(site, n_hospitals, .before = study_month)
 write_csv(prone_per_month, paste0(project_location, '/project_output/', site,'_prone_per_month.csv'))
@@ -157,10 +163,16 @@ prone_per_month_by_hospital <- prone_analytic_df |>
     'n_patients' = n(),
     'n_proned_12_hr' = sum(prone_12hour_outcome),
     'proned_12_hr_percent' = mean(prone_12hour_outcome),
-    'n_proned' = sum(proned),
-    'proned_percent' = mean(proned),
-    'standard_error' = sqrt(mean(prone_12hour_outcome) * (1 - mean(prone_12hour_outcome)) / n()),
-    'standard_error_alltime' = sqrt(mean(proned) * (1 - mean(proned)) / n())
+    'standard_error_12' = sqrt(mean(prone_12hour_outcome) * (1 - mean(prone_12hour_outcome)) / n()),
+    'n_proned_24_hr' = sum(prone_24hour_outcome),
+    'proned_24_hr_percent' = mean(prone_24hour_outcome),
+    'standard_error_24' = sqrt(mean(prone_24hour_outcome) * (1 - mean(prone_24hour_outcome)) / n()),
+    'n_proned_72_hr' = sum(prone_72hour_outcome),
+    'proned_72_hr_percent' = mean(prone_72hour_outcome),
+    'standard_error_72' = sqrt(mean(prone_72hour_outcome) * (1 - mean(prone_72hour_outcome)) / n()),
+    'n_proned_all' = sum(proned),
+    'proned_percent_all' = mean(proned),
+    'standard_error_all' = sqrt(mean(proned) * (1 - mean(proned)) / n())
   ) |>
   relocate(site, n_hospitals, .before = study_month)
 write_csv(prone_per_month_by_hospital, paste0(project_location, '/project_output/', site,'_prone_per_month_hospital.csv'))
@@ -175,10 +187,16 @@ prone_per_period <- prone_analytic_df |>
     'n_patients' = n(),
     'n_proned_12_hr' = sum(prone_12hour_outcome),
     'proned_12_hr_percent' = mean(prone_12hour_outcome),
-    'n_proned' = sum(proned),
-    'proned_percent' = mean(proned),
-    'standard_error' = sqrt(mean(prone_12hour_outcome) * (1 - mean(prone_12hour_outcome)) / n()),
-    'standard_error_alltime' = sqrt(mean(proned) * (1 - mean(proned)) / n()) 
+    'standard_error_12' = sqrt(mean(prone_12hour_outcome) * (1 - mean(prone_12hour_outcome)) / n()),
+    'n_proned_24_hr' = sum(prone_24hour_outcome),
+    'proned_24_hr_percent' = mean(prone_24hour_outcome),
+    'standard_error_24' = sqrt(mean(prone_24hour_outcome) * (1 - mean(prone_24hour_outcome)) / n()),
+    'n_proned_72_hr' = sum(prone_72hour_outcome),
+    'proned_72_hr_percent' = mean(prone_72hour_outcome),
+    'standard_error_72' = sqrt(mean(prone_72hour_outcome) * (1 - mean(prone_72hour_outcome)) / n()),
+    'n_proned_all' = sum(proned),
+    'proned_percent_all' = mean(proned),
+    'standard_error_all' = sqrt(mean(proned) * (1 - mean(proned)) / n())
   ) |>
   relocate(site, n_hospitals, .before = study_period)
 write_csv(prone_per_period, paste0(project_location, '/project_output/', site,'_prone_per_period.csv'))
@@ -193,10 +211,16 @@ prone_per_quarter <- prone_analytic_df |>
     'n_patients' = n(),
     'n_proned_12_hr' = sum(prone_12hour_outcome),
     'proned_12_hr_percent' = mean(prone_12hour_outcome),
-    'n_proned' = sum(proned),
-    'proned_percent' = mean(proned),
-    'standard_error' = sqrt(mean(prone_12hour_outcome) * (1 - mean(prone_12hour_outcome)) / n()), 
-    'standard_error_alltime' = sqrt(mean(proned) * (1 - mean(proned)) / n()) 
+    'standard_error_12' = sqrt(mean(prone_12hour_outcome) * (1 - mean(prone_12hour_outcome)) / n()),
+    'n_proned_24_hr' = sum(prone_24hour_outcome),
+    'proned_24_hr_percent' = mean(prone_24hour_outcome),
+    'standard_error_24' = sqrt(mean(prone_24hour_outcome) * (1 - mean(prone_24hour_outcome)) / n()),
+    'n_proned_72_hr' = sum(prone_72hour_outcome),
+    'proned_72_hr_percent' = mean(prone_72hour_outcome),
+    'standard_error_72' = sqrt(mean(prone_72hour_outcome) * (1 - mean(prone_72hour_outcome)) / n()),
+    'n_proned_all' = sum(proned),
+    'proned_percent_all' = mean(proned),
+    'standard_error_all' = sqrt(mean(proned) * (1 - mean(proned)) / n())
       ) |>
   relocate(site, n_hospitals, .before = study_quarter)
 write_csv(prone_per_quarter, paste0(project_location, '/project_output/', site,'_prone_per_quarter.csv'))
@@ -341,8 +365,8 @@ quarter_labels <- c(
 study_quarter_labels <- quarter_labels[min_quarter:max_quarter]
 
 base_plot <- ggplot(prone_per_quarter, aes(x=study_quarter, y=proned_12_hr_percent)) +
-  geom_errorbar(aes(ymin = proned_12_hr_percent - standard_error, ymax = proned_12_hr_percent + 
-                      standard_error), width = 0.1, alpha = 0.5, color = 'grey') +
+  geom_errorbar(aes(ymin = proned_12_hr_percent - standard_error_12, ymax = proned_12_hr_percent + 
+                      standard_error_12), width = 0.1, alpha = 0.5, color = 'grey') +
   geom_point() +
   geom_line() +
   scale_y_continuous(breaks=seq(0,1, by=0.1), 
@@ -379,13 +403,100 @@ if (site_type == "Pre-COVID,COVID,Post-COVID") { #If Site Has Full Study Period 
 }
 # Display the extended plot
 extended
-ggsave(paste0(site, '_proning_by_quarter.pdf'),
+ggsave(paste0(site, '_proning_by_quarter_12.pdf'),
        path = paste0(project_location, '/project_output/graphs/'))
 
-#Repeat for any proning, regardless of 12h timing "all time"
-base_plot_alltime <- ggplot(prone_per_quarter, aes(x=study_quarter, y=proned_percent)) +
-  geom_errorbar(aes(ymin = proned_percent - standard_error_alltime, ymax = proned_percent + 
-                      standard_error_alltime), width = 0.1, alpha = 0.5, color = 'grey') +
+#Repeat for any proning, within 24h
+base_plot_24 <- ggplot(prone_per_quarter, aes(x=study_quarter, y=proned_24_hr_percent)) +
+  geom_errorbar(aes(ymin = proned_24_hr_percent - standard_error_24, ymax = proned_24_hr_percent + 
+                      standard_error_24), width = 0.1, alpha = 0.5, color = 'grey') +
+  geom_point() +
+  geom_line() +
+  scale_y_continuous(breaks=seq(0,1, by=0.1), 
+                     labels = scales::percent, 
+                     limits = c(0,1.0),
+                     name = 'Proned with 24 hours of Meeting Proseva Criteria') +
+  scale_x_continuous(breaks=seq(min_quarter, max_quarter, by=1),
+                     labels = study_quarter_labels,
+                     limits = c(min_quarter, max_quarter),
+                     name = 'Year: Months') +
+  theme_classic() + # theme_classic call
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1)) # custom x-axis text
+
+#Now Add Annotations and Verticle Lines to Plot Based on What Data a Site Has Contributed
+if (site_type == "Pre-COVID,COVID,Post-COVID") { #If Site Has Full Study Period (2018-2023)
+  extended <- base_plot_24 +
+    geom_vline(xintercept = 9.6667, linetype = 2) +
+    annotate("text", x=5.667, y=0.95, label = 'Pre COVID-19') +
+    geom_vline(xintercept = 17.6667, linetype = 2) +
+    annotate("text", x=13.667, y=0.95, label = 'COVID-19') +
+    annotate("text", x=21.667, y=0.95, label = 'Post COVID-19') 
+} else if (site_type == "COVID,Post-COVID") {
+  extended <- base_plot_24 + 
+    geom_vline(xintercept = 17.6667, linetype = 2) +
+    annotate("text", x=13.667, y=0.95, label = 'COVID-19') +
+    annotate("text", x=21.667, y=0.95, label = 'Post COVID-19') 
+} else if (site_type == "Pre-COVID,COVID") {
+  extended <- base_plot_24 + 
+    geom_vline(xintercept = 9.6667, linetype = 2) +
+    annotate("text", x=5.667, y=0.95, label = 'Pre COVID-19') +
+    annotate("text", x=13.667, y=0.95, label = 'COVID-19') 
+} else {
+  extended <- base_plot_24
+}
+# Display the extended plot
+extended
+ggsave(paste0(site, '_proning_by_quarter_24.pdf'),
+       path = paste0(project_location, '/project_output/graphs/'))
+
+
+#Repeat for any proning, within 72h 
+base_plot_72 <- ggplot(prone_per_quarter, aes(x=study_quarter, y=proned_72_hr_percent)) +
+  geom_errorbar(aes(ymin = proned_72_hr_percent - standard_error_72, ymax = proned_72_hr_percent + 
+                      standard_error_72), width = 0.1, alpha = 0.5, color = 'grey') +
+  geom_point() +
+  geom_line() +
+  scale_y_continuous(breaks=seq(0,1, by=0.1), 
+                     labels = scales::percent, 
+                     limits = c(0,1.0),
+                     name = 'Proned Within 72 Hours of Meeting PROSEVA Criteria') +
+  scale_x_continuous(breaks=seq(min_quarter, max_quarter, by=1),
+                     labels = study_quarter_labels,
+                     limits = c(min_quarter, max_quarter),
+                     name = 'Year: Months') +
+  theme_classic() + # theme_classic call
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1)) # custom x-axis text
+
+#Now Add Annotations and Verticle Lines to Plot Based on What Data a Site Has Contributed
+if (site_type == "Pre-COVID,COVID,Post-COVID") { #If Site Has Full Study Period (2018-2023)
+  extended <- base_plot_72 +
+    geom_vline(xintercept = 9.6667, linetype = 2) +
+    annotate("text", x=5.667, y=0.95, label = 'Pre COVID-19') +
+    geom_vline(xintercept = 17.6667, linetype = 2) +
+    annotate("text", x=13.667, y=0.95, label = 'COVID-19') +
+    annotate("text", x=21.667, y=0.95, label = 'Post COVID-19') 
+} else if (site_type == "COVID,Post-COVID") {
+  extended <- base_plot_72 + 
+    geom_vline(xintercept = 17.6667, linetype = 2) +
+    annotate("text", x=13.667, y=0.95, label = 'COVID-19') +
+    annotate("text", x=21.667, y=0.95, label = 'Post COVID-19') 
+} else if (site_type == "Pre-COVID,COVID") {
+  extended <- base_plot_72 + 
+    geom_vline(xintercept = 9.6667, linetype = 2) +
+    annotate("text", x=5.667, y=0.95, label = 'Pre COVID-19') +
+    annotate("text", x=13.667, y=0.95, label = 'COVID-19') 
+} else {
+  extended <- base_plot_72
+}
+# Display the extended plot
+extended
+ggsave(paste0(site, '_proning_by_quarter_72.pdf'),
+       path = paste0(project_location, '/project_output/graphs/'))
+
+#Repeat for any proning, all prones among patients in cohort
+base_plot_all <- ggplot(prone_per_quarter, aes(x=study_quarter, y=proned_percent_all)) +
+  geom_errorbar(aes(ymin = proned_percent_all - standard_error_all, ymax = proned_percent_all + 
+                      standard_error_all), width = 0.1, alpha = 0.5, color = 'grey') +
   geom_point() +
   geom_line() +
   scale_y_continuous(breaks=seq(0,1, by=0.1), 
@@ -401,28 +512,28 @@ base_plot_alltime <- ggplot(prone_per_quarter, aes(x=study_quarter, y=proned_per
 
 #Now Add Annotations and Verticle Lines to Plot Based on What Data a Site Has Contributed
 if (site_type == "Pre-COVID,COVID,Post-COVID") { #If Site Has Full Study Period (2018-2023)
-  extended <- base_plot_alltime +
+  extended <- base_plot_all +
     geom_vline(xintercept = 9.6667, linetype = 2) +
     annotate("text", x=5.667, y=0.95, label = 'Pre COVID-19') +
     geom_vline(xintercept = 17.6667, linetype = 2) +
     annotate("text", x=13.667, y=0.95, label = 'COVID-19') +
     annotate("text", x=21.667, y=0.95, label = 'Post COVID-19') 
 } else if (site_type == "COVID,Post-COVID") {
-  extended <- base_plot_alltime + 
+  extended <- base_plot_all + 
     geom_vline(xintercept = 17.6667, linetype = 2) +
     annotate("text", x=13.667, y=0.95, label = 'COVID-19') +
     annotate("text", x=21.667, y=0.95, label = 'Post COVID-19') 
 } else if (site_type == "Pre-COVID,COVID") {
-  extended <- base_plot_alltime + 
+  extended <- base_plot_all + 
     geom_vline(xintercept = 9.6667, linetype = 2) +
     annotate("text", x=5.667, y=0.95, label = 'Pre COVID-19') +
     annotate("text", x=13.667, y=0.95, label = 'COVID-19') 
 } else {
-  extended <- base_plot_alltime
+  extended <- base_plot_all
 }
 # Display the extended plot
 extended
-ggsave(paste0(site, '_proning_by_quarter_alltime.pdf'),
+ggsave(paste0(site, '_proning_by_quarter_all.pdf'),
        path = paste0(project_location, '/project_output/graphs/'))
 
 #Now Repeat for Month
@@ -430,7 +541,7 @@ ggsave(paste0(site, '_proning_by_quarter_alltime.pdf'),
 tool <- seq(min_month, max_month, by=2)
 new_month_labels <- site_month_labels[tool]
 base_plot <- ggplot(prone_per_month, aes(x=study_month, y=proned_12_hr_percent)) +
-  geom_errorbar(aes(ymin = proned_12_hr_percent - standard_error, ymax = proned_12_hr_percent + standard_error), 
+  geom_errorbar(aes(ymin = proned_12_hr_percent - standard_error_12, ymax = proned_12_hr_percent + standard_error_12), 
                 width = 0.1, alpha = 0.5, color = 'grey') +
   geom_point() +
   geom_line() +
@@ -468,12 +579,98 @@ if (site_type == "Pre-COVID,COVID,Post-COVID") { #If Site Has Full Study Period 
 }
 # Display the extended plot
 extended
-ggsave(paste0(site, '_proning_by_month.pdf'),
+ggsave(paste0(site, '_proning_by_month_12.pdf'),
        path = paste0(project_location, '/project_output/graphs/'))
 
-#Repeat for monthly proning, regardless of 12h cutoff "all_time" proning
-base_plot_alltime <- ggplot(prone_per_month, aes(x=study_month, y=proned_percent)) +
-  geom_errorbar(aes(ymin = proned_percent - standard_error_alltime, ymax = proned_percent + standard_error_alltime), 
+#Repeat for monthly proning, within 24h meeting criteria
+base_plot_24 <- ggplot(prone_per_month, aes(x=study_month, y=proned_24_hr_percent)) +
+  geom_errorbar(aes(ymin = proned_24_hr_percent - standard_error_24, ymax = proned_24_hr_percent + standard_error_24), 
+                width = 0.1, alpha = 0.5, color = 'grey') +
+  geom_point() +
+  geom_line() +
+  scale_y_continuous(breaks=seq(0,1, by=0.1), 
+                     labels = scales::percent, 
+                     limits = c(0,1.0),
+                     name = 'Proned Within 24h of Meeting PROSEVA Criteria') +
+  scale_x_continuous(breaks=seq(min_month, max_month, by=2),
+                     labels = new_month_labels,
+                     limits = c(min_month, max_month),
+                     name = 'Month-Year') +
+  theme_classic() + # theme_classic call
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1)) # custom x-axis text
+
+#Now Add Annotations and Verticle Lines to Plot Based on What Data a Site Has Contributed
+if (site_type == "Pre-COVID,COVID,Post-COVID") { #If Site Has Full Study Period (2018-2023)
+  extended <- base_plot_24 +
+    geom_vline(xintercept = 27, linetype = 2) +
+    annotate("text", x=15, y=0.95, label = 'Pre COVID-19') +
+    geom_vline(xintercept = 51, linetype = 2) +
+    annotate("text", x=39, y=0.95, label = 'COVID-19') +
+    annotate("text", x=63, y=0.95, label = 'Post COVID-19') 
+} else if (site_type == "COVID,Post-COVID") { #Just COVID and Post COVID
+  extended <- base_plot_24 + 
+    geom_vline(xintercept = 51, linetype = 2) +
+    annotate("text", x=39, y=0.95, label = 'COVID-19') +
+    annotate("text", x=63, y=0.95, label = 'Post COVID-19') 
+} else if (site_type == "Pre-COVID,COVID") { #Just Pre-COVID and COVID
+  extended <- base_plot_24 + 
+    geom_vline(xintercept = 27, linetype = 2) +
+    annotate("text", x=15, y=0.95, label = 'Pre COVID-19') +
+    annotate("text", x=39, y=0.95, label = 'COVID-19')
+} else {
+  extended <- base_plot_24
+}
+# Display the extended plot
+extended
+ggsave(paste0(site, '_proning_by_month_24.pdf'),
+       path = paste0(project_location, '/project_output/graphs/'))
+
+#Repeat for monthly proning, prone within 72 h
+base_plot_72 <- ggplot(prone_per_month, aes(x=study_month, y=proned_72_hr_percent)) +
+  geom_errorbar(aes(ymin = proned_72_hr_percent - standard_error_72, ymax = proned_72_hr_percent + standard_error_72), 
+                width = 0.1, alpha = 0.5, color = 'grey') +
+  geom_point() +
+  geom_line() +
+  scale_y_continuous(breaks=seq(0,1, by=0.1), 
+                     labels = scales::percent, 
+                     limits = c(0,1.0),
+                     name = 'Proned within 72 hours of meeting PROSEVA criteria') +
+  scale_x_continuous(breaks=seq(min_month, max_month, by=2),
+                     labels = new_month_labels,
+                     limits = c(min_month, max_month),
+                     name = 'Month-Year') +
+  theme_classic() + # theme_classic call
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1)) # custom x-axis text
+
+#Now Add Annotations and Verticle Lines to Plot Based on What Data a Site Has Contributed
+if (site_type == "Pre-COVID,COVID,Post-COVID") { #If Site Has Full Study Period (2018-2023)
+  extended <- base_plot_72 +
+    geom_vline(xintercept = 27, linetype = 2) +
+    annotate("text", x=15, y=0.95, label = 'Pre COVID-19') +
+    geom_vline(xintercept = 51, linetype = 2) +
+    annotate("text", x=39, y=0.95, label = 'COVID-19') +
+    annotate("text", x=63, y=0.95, label = 'Post COVID-19') 
+} else if (site_type == "COVID,Post-COVID") { #Just COVID and Post COVID
+  extended <- base_plot_72 + 
+    geom_vline(xintercept = 51, linetype = 2) +
+    annotate("text", x=39, y=0.95, label = 'COVID-19') +
+    annotate("text", x=63, y=0.95, label = 'Post COVID-19') 
+} else if (site_type == "Pre-COVID,COVID") { #Just Pre-COVID and COVID
+  extended <- base_plot_72 + 
+    geom_vline(xintercept = 27, linetype = 2) +
+    annotate("text", x=15, y=0.95, label = 'Pre COVID-19') +
+    annotate("text", x=39, y=0.95, label = 'COVID-19')
+} else {
+  extended <- base_plot_72
+}
+# Display the extended plot
+extended
+ggsave(paste0(site, '_proning_by_month_72.pdf'),
+       path = paste0(project_location, '/project_output/graphs/'))
+
+#Repeat for monthly proning, "all_time" proning
+base_plot_all <- ggplot(prone_per_month, aes(x=study_month, y=proned_percent_all)) +
+  geom_errorbar(aes(ymin = proned_percent_all - standard_error_all, ymax = proned_percent_all + standard_error_all), 
                 width = 0.1, alpha = 0.5, color = 'grey') +
   geom_point() +
   geom_line() +
@@ -490,28 +687,28 @@ base_plot_alltime <- ggplot(prone_per_month, aes(x=study_month, y=proned_percent
 
 #Now Add Annotations and Verticle Lines to Plot Based on What Data a Site Has Contributed
 if (site_type == "Pre-COVID,COVID,Post-COVID") { #If Site Has Full Study Period (2018-2023)
-  extended <- base_plot_alltime +
+  extended <- base_plot_all +
     geom_vline(xintercept = 27, linetype = 2) +
     annotate("text", x=15, y=0.95, label = 'Pre COVID-19') +
     geom_vline(xintercept = 51, linetype = 2) +
     annotate("text", x=39, y=0.95, label = 'COVID-19') +
     annotate("text", x=63, y=0.95, label = 'Post COVID-19') 
 } else if (site_type == "COVID,Post-COVID") { #Just COVID and Post COVID
-  extended <- base_plot_alltime + 
+  extended <- base_plot_all + 
     geom_vline(xintercept = 51, linetype = 2) +
     annotate("text", x=39, y=0.95, label = 'COVID-19') +
     annotate("text", x=63, y=0.95, label = 'Post COVID-19') 
 } else if (site_type == "Pre-COVID,COVID") { #Just Pre-COVID and COVID
-  extended <- base_plot_alltime + 
+  extended <- base_plot_all + 
     geom_vline(xintercept = 27, linetype = 2) +
     annotate("text", x=15, y=0.95, label = 'Pre COVID-19') +
     annotate("text", x=39, y=0.95, label = 'COVID-19')
 } else {
-  extended <- base_plot_alltime
+  extended <- base_plot_all
 }
 # Display the extended plot
 extended
-ggsave(paste0(site, '_proning_by_month_alltime.pdf'),
+ggsave(paste0(site, '_proning_by_month_all.pdf'),
        path = paste0(project_location, '/project_output/graphs/'))
 
 ```
@@ -529,6 +726,8 @@ to_tab <- c(
 #Factor Variables
 factors_tab <- c(
    'prone_12hour_outcome',
+   'prone_24hour_outcome',
+   'prone_72hour_outcome',
   'proned',
   'in_hosp_death',
   'death_or_hospice'
@@ -768,6 +967,322 @@ write.csv(two_period_table, paste0(project_location, '/project_output/', site, '
   }
 ```
 
+
+```{r Segmented Regression - Univariable - 24h}
+#For Sites with > 1 Hospital, Run Mixed Effects Models Otherwise Run as Logistic Regression
+#For now these are Logistic Regressions
+#This is the Model Form for Evaluating the Step Changes NOT taking Into Account Time Trends
+#Look at all proning outcome. 
+if (n_hospitals>1) {
+model_form_step <- prone_24hour_outcome ~ study_period + factor(hospital_id)
+unvar_mod <- glm(model_form_step,
+          data = prone_analytic_df, 
+          family=binomial)
+} else {
+model_form_step <- prone_24hour_outcome ~ study_period
+unvar_mod <- glm(model_form_step,
+          data = prone_analytic_df, 
+          family=binomial)
+}
+
+summary(unvar_mod)
+unvar_mod_summary <- model_summary_table(unvar_mod)
+
+#This is the Model Form for Evaluating the Step Changes AND Time Trends
+#Will Scale STudy Month So Coefficients Tell Us About Change in Log Odds Per 3 month Change
+prone_analytic_df <- prone_analytic_df |>
+  mutate(month_scaled=study_month/3)
+
+if (n_hospitals>1) {
+model_form_step <- prone_24hour_outcome ~ study_period + study_period:month_scaled + factor(hospital_id)
+unvar_mod_interact <- glm(model_form_step,
+          data = prone_analytic_df, 
+          family=binomial)
+} else {
+model_form_step <- prone_24hour_outcome ~ study_period + study_period:month_scaled 
+unvar_mod_interact <- glm(model_form_step,
+          data = prone_analytic_df, 
+          family=binomial)
+}
+
+summary(unvar_mod_interact)
+unvar_modinteract_summary <- model_summary_table(unvar_mod_interact)
+
+univar_table <- rowbind(unvar_mod_summary, data.frame('site'=c('','Model With Interaction Terms')), fill = TRUE) |>
+               rbind(unvar_modinteract_summary)
+# Write the table to a CSV file
+write.csv(univar_table, paste0(project_location, '/project_output/', site, '_unadjusted_models_24.csv'))
+```
+
+```{r Adjusted Segmented Regression - Proning within 24h}
+if (n_hospitals>1) {
+model_form_step <- prone_24hour_outcome ~ study_period + age_at_admission  + bmi + factor(max_norepi_equivalent) + or_before_enrollment + min_pf_ratio + factor(hospital_id)
+} else {
+  model_form_step <- prone_24hour_outcome ~ study_period + age_at_admission  + bmi + factor(max_norepi_equivalent) + or_before_enrollment + min_pf_ratio
+}
+
+multivar_mod <- glm(model_form_step,
+          data = prone_analytic_df, 
+          family=binomial)
+summary(multivar_mod)
+multivar_mod_summary <- model_summary_table(multivar_mod)
+
+#This is the Model Form for Evaluating the Step Changes AND Time Trends
+#Will Scale STudy Month So Coefficients Tell Us About Change in Log Odds Per 3 month Change
+if (n_hospitals>1) {
+model_form_step <- prone_24hour_outcome ~ study_period + study_period:month_scaled + age_at_admission + bmi + factor(max_norepi_equivalent) + or_before_enrollment + min_pf_ratio + factor(hospital_id) 
+} else {
+  model_form_step <- prone_24hour_outcome ~ study_period + study_period:month_scaled + age_at_admission + bmi + factor(max_norepi_equivalent) + or_before_enrollment + min_pf_ratio
+}
+
+multivar_mod_interact <- glm(model_form_step,
+          data = prone_analytic_df, 
+          family=binomial)
+summary(multivar_mod_interact)
+multivar_modinteract_summary <- model_summary_table(multivar_mod_interact)
+
+multivar_table <- rowbind(multivar_mod_summary, data.frame('site'=c('','Model With Interaction Terms')), fill = TRUE) |>
+               rbind(multivar_modinteract_summary)
+# Write the table to a CSV file
+write.csv(multivar_table, paste0(project_location, '/project_output/', site, '_adjusted_models_24.csv'))
+
+```
+
+```{r Post HOC Analysis Analyzing Just Step Change at Transition to COVID Period With Rate of Change Prior and After - 24h proning}
+#For Sites with PRE-COVID Data They Will A STep Change From Pre-COVID to COVID and then analyze effect of time (in 3 month interval before and after this step change)
+#For Sites without Pre-COVID Data There is No Period Change and the Interest is in the Rate of Proning Decline Over the Study Period
+#All prones 
+prone_analytic_df <- prone_analytic_df |>
+   mutate(covid_period=fcase(
+    study_month>=1 & study_month<27, 'Pre-COVID',
+    study_month>=27, 'COVID'
+  )) 
+
+#Only Sites with Pre-COVID Data Can Run this Analysis
+if (grepl('Pre-COVID', site_type)) {
+#First Univariable
+if (n_hospitals>1) {
+  model_form_step <- prone_24hour_outcome ~ covid_period + covid_period:month_scaled + factor(hospital_id)
+} else {
+  model_form_step <- prone_24hour_outcome ~ covid_period + covid_period:month_scaled
+}
+two_period_unvar <- glm(model_form_step,
+          data = prone_analytic_df, 
+          family=binomial)
+summary(two_period_unvar)
+two_period_unvar_sum <- model_summary_table(two_period_unvar)
+
+if (n_hospitals>1) {
+  model_form_step <- prone_24hour_outcome ~ covid_period + covid_period:month_scaled + age_at_admission+ bmi + factor(max_norepi_equivalent) + or_before_enrollment + min_pf_ratio + factor(hospital_id)
+} else {
+model_form_step <- prone_24hour_outcome ~ covid_period + covid_period:month_scaled + age_at_admission+ bmi + factor(max_norepi_equivalent) + or_before_enrollment + min_pf_ratio 
+}
+
+two_period_multivar_mod <- glm(model_form_step,
+          data = prone_analytic_df, 
+          family=binomial)
+summary(two_period_multivar_mod)
+two_period_multivar_sum <- model_summary_table(two_period_multivar_mod)
+
+two_period_table <- rowbind(two_period_unvar_sum, data.frame('site'=c('','Adjusted Model')), fill = TRUE) |>
+               rbind(two_period_multivar_sum)
+# Write the table to a CSV file
+write.csv(two_period_table, paste0(project_location, '/project_output/', site, 'two_period_models_24.csv'))
+
+
+} else { 
+#First Univariable
+if (n_hospitals>1) {
+model_form_step <- prone_24hour_outcome ~ month_scaled + factor(hospital_id)
+} else {
+  model_form_step <- prone_24hour_outcome ~ month_scaled
+}
+two_period_unvar <- glm(model_form_step,
+          data = prone_analytic_df, 
+          family=binomial)
+summary(two_period_unvar)
+two_period_unvar_sum <- model_summary_table(two_period_unvar)
+
+#Now Multivariable
+if (n_hospitals>1) {
+model_form_step <- prone_24hour_outcome ~ month_scaled + age_at_admission  + bmi + factor(max_norepi_equivalent) + or_before_enrollment + min_pf_ratio + factor(hospital_id)
+} else {
+  model_form_step <- prone_24hour_outcome ~ month_scaled + age_at_admission  + bmi + factor(max_norepi_equivalent) + or_before_enrollment + min_pf_ratio
+}
+two_period_multivar_mod <- glm(model_form_step,
+          data = prone_analytic_df, 
+          family=binomial)
+summary(two_period_multivar_mod)
+two_period_multivar_sum <- model_summary_table(two_period_multivar_mod)
+
+two_period_table <- rowbind(two_period_unvar_sum, data.frame('site'=c('','Adjusted Model')), fill = TRUE) |>
+               rbind(two_period_multivar_sum)
+# Write the table to a CSV file
+write.csv(two_period_table, paste0(project_location, '/project_output/', site, 'two_period_models_24.csv'))
+  }
+
+```
+
+
+```{r Segmented Regression - Univariable - Proning within 72 hours}
+#For Sites with > 1 Hospital, Run Mixed Effects Models Otherwise Run as Logistic Regression
+#For now these are Logistic Regressions
+#This is the Model Form for Evaluating the Step Changes NOT taking Into Account Time Trends
+#Look at all proning outcome. 
+if (n_hospitals>1) {
+model_form_step <- prone_72hour_outcome ~ study_period + factor(hospital_id)
+unvar_mod <- glm(model_form_step,
+          data = prone_analytic_df, 
+          family=binomial)
+} else {
+model_form_step <- prone_72hour_outcome ~ study_period
+unvar_mod <- glm(model_form_step,
+          data = prone_analytic_df, 
+          family=binomial)
+}
+
+summary(unvar_mod)
+unvar_mod_summary <- model_summary_table(unvar_mod)
+
+#This is the Model Form for Evaluating the Step Changes AND Time Trends
+#Will Scale STudy Month So Coefficients Tell Us About Change in Log Odds Per 3 month Change
+prone_analytic_df <- prone_analytic_df |>
+  mutate(month_scaled=study_month/3)
+
+if (n_hospitals>1) {
+model_form_step <- prone_72hour_outcome ~ study_period + study_period:month_scaled + factor(hospital_id)
+unvar_mod_interact <- glm(model_form_step,
+          data = prone_analytic_df, 
+          family=binomial)
+} else {
+model_form_step <- prone_72hour_outcome ~ study_period + study_period:month_scaled 
+unvar_mod_interact <- glm(model_form_step,
+          data = prone_analytic_df, 
+          family=binomial)
+}
+
+summary(unvar_mod_interact)
+unvar_modinteract_summary <- model_summary_table(unvar_mod_interact)
+
+univar_table <- rowbind(unvar_mod_summary, data.frame('site'=c('','Model With Interaction Terms')), fill = TRUE) |>
+               rbind(unvar_modinteract_summary)
+# Write the table to a CSV file
+write.csv(univar_table, paste0(project_location, '/project_output/', site, '_unadjusted_models_72.csv'))
+```
+
+
+
+```{r Adjusted Segmented Regression - Proning within 72 hours}
+if (n_hospitals>1) {
+model_form_step <- prone_72hour_outcome ~ study_period + age_at_admission  + bmi + factor(max_norepi_equivalent) + or_before_enrollment + min_pf_ratio + factor(hospital_id)
+} else {
+  model_form_step <- prone_72hour_outcome ~ study_period + age_at_admission  + bmi + factor(max_norepi_equivalent) + or_before_enrollment + min_pf_ratio
+}
+
+multivar_mod <- glm(model_form_step,
+          data = prone_analytic_df, 
+          family=binomial)
+summary(multivar_mod)
+multivar_mod_summary <- model_summary_table(multivar_mod)
+
+#This is the Model Form for Evaluating the Step Changes AND Time Trends
+#Will Scale STudy Month So Coefficients Tell Us About Change in Log Odds Per 3 month Change
+if (n_hospitals>1) {
+model_form_step <- prone_72hour_outcome ~ study_period + study_period:month_scaled + age_at_admission + bmi + factor(max_norepi_equivalent) + or_before_enrollment + min_pf_ratio + factor(hospital_id) 
+} else {
+  model_form_step <- prone_72hour_outcome ~ study_period + study_period:month_scaled + age_at_admission + bmi + factor(max_norepi_equivalent) + or_before_enrollment + min_pf_ratio
+}
+
+multivar_mod_interact <- glm(model_form_step,
+          data = prone_analytic_df, 
+          family=binomial)
+summary(multivar_mod_interact)
+multivar_modinteract_summary <- model_summary_table(multivar_mod_interact)
+
+multivar_table <- rowbind(multivar_mod_summary, data.frame('site'=c('','Model With Interaction Terms')), fill = TRUE) |>
+               rbind(multivar_modinteract_summary)
+# Write the table to a CSV file
+write.csv(multivar_table, paste0(project_location, '/project_output/', site, '_adjusted_models_72.csv'))
+
+```
+
+
+```{r Post HOC Analysis Analyzing Just Step Change at Transition to COVID Period With Rate of Change Prior and After - 72h proning}
+#For Sites with PRE-COVID Data They Will A STep Change From Pre-COVID to COVID and then analyze effect of time (in 3 month interval before and after this step change)
+#For Sites without Pre-COVID Data There is No Period Change and the Interest is in the Rate of Proning Decline Over the Study Period
+#All prones 
+prone_analytic_df <- prone_analytic_df |>
+   mutate(covid_period=fcase(
+    study_month>=1 & study_month<27, 'Pre-COVID',
+    study_month>=27, 'COVID'
+  )) 
+
+#Only Sites with Pre-COVID Data Can Run this Analysis
+if (grepl('Pre-COVID', site_type)) {
+#First Univariable
+if (n_hospitals>1) {
+  model_form_step <- prone_72hour_outcome ~ covid_period + covid_period:month_scaled + factor(hospital_id)
+} else {
+  model_form_step <- prone_72hour_outcome ~ covid_period + covid_period:month_scaled
+}
+two_period_unvar <- glm(model_form_step,
+          data = prone_analytic_df, 
+          family=binomial)
+summary(two_period_unvar)
+two_period_unvar_sum <- model_summary_table(two_period_unvar)
+
+if (n_hospitals>1) {
+  model_form_step <- prone_72hour_outcome ~ covid_period + covid_period:month_scaled + age_at_admission+ bmi + factor(max_norepi_equivalent) + or_before_enrollment + min_pf_ratio + factor(hospital_id)
+} else {
+model_form_step <- prone_72hour_outcome ~ covid_period + covid_period:month_scaled + age_at_admission+ bmi + factor(max_norepi_equivalent) + or_before_enrollment + min_pf_ratio 
+}
+
+two_period_multivar_mod <- glm(model_form_step,
+          data = prone_analytic_df, 
+          family=binomial)
+summary(two_period_multivar_mod)
+two_period_multivar_sum <- model_summary_table(two_period_multivar_mod)
+
+two_period_table <- rowbind(two_period_unvar_sum, data.frame('site'=c('','Adjusted Model')), fill = TRUE) |>
+               rbind(two_period_multivar_sum)
+# Write the table to a CSV file
+write.csv(two_period_table, paste0(project_location, '/project_output/', site, 'two_period_models_72.csv'))
+
+
+} else { 
+#First Univariable
+if (n_hospitals>1) {
+model_form_step <- prone_72hour_outcome ~ month_scaled + factor(hospital_id)
+} else {
+  model_form_step <- prone_72hour_outcome ~ month_scaled
+}
+two_period_unvar <- glm(model_form_step,
+          data = prone_analytic_df, 
+          family=binomial)
+summary(two_period_unvar)
+two_period_unvar_sum <- model_summary_table(two_period_unvar)
+
+#Now Multivariable
+if (n_hospitals>1) {
+model_form_step <- prone_72hour_outcome ~ month_scaled + age_at_admission  + bmi + factor(max_norepi_equivalent) + or_before_enrollment + min_pf_ratio + factor(hospital_id)
+} else {
+  model_form_step <- prone_72hour_outcome ~ month_scaled + age_at_admission  + bmi + factor(max_norepi_equivalent) + or_before_enrollment + min_pf_ratio
+}
+two_period_multivar_mod <- glm(model_form_step,
+          data = prone_analytic_df, 
+          family=binomial)
+summary(two_period_multivar_mod)
+two_period_multivar_sum <- model_summary_table(two_period_multivar_mod)
+
+two_period_table <- rowbind(two_period_unvar_sum, data.frame('site'=c('','Adjusted Model')), fill = TRUE) |>
+               rbind(two_period_multivar_sum)
+# Write the table to a CSV file
+write.csv(two_period_table, paste0(project_location, '/project_output/', site, 'two_period_models_72.csv'))
+  }
+
+```
+
+
 ```{r Segmented Regression - Univariable - All Proning}
 #For Sites with > 1 Hospital, Run Mixed Effects Models Otherwise Run as Logistic Regression
 #For now these are Logistic Regressions
@@ -814,8 +1329,6 @@ univar_table <- rowbind(unvar_mod_summary, data.frame('site'=c('','Model With In
 write.csv(univar_table, paste0(project_location, '/project_output/', site, '_unadjusted_models_alltime.csv'))
 ```
 
-
-
 ```{r Adjusted Segmented Regression - All Proning}
 if (n_hospitals>1) {
 model_form_step <- proned ~ study_period + age_at_admission  + bmi + factor(max_norepi_equivalent) + or_before_enrollment + min_pf_ratio + factor(hospital_id)
@@ -849,7 +1362,6 @@ multivar_table <- rowbind(multivar_mod_summary, data.frame('site'=c('','Model Wi
 write.csv(multivar_table, paste0(project_location, '/project_output/', site, '_adjusted_models_alltime.csv'))
 
 ```
-
 
 ```{r Post HOC Analysis Analyzing Just Step Change at Transition to COVID Period With Rate of Change Prior and After - All proning}
 #For Sites with PRE-COVID Data They Will A STep Change From Pre-COVID to COVID and then analyze effect of time (in 3 month interval before and after this step change)
@@ -925,13 +1437,3 @@ write.csv(two_period_table, paste0(project_location, '/project_output/', site, '
   }
 
 ```
-
-
-
-
-
-
-```{r Adjusted Analysis Stratified by Hypoxemia Severity}
-
-```
-

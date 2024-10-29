@@ -16,6 +16,7 @@ file_type <- 'parquet'
 tables_location <- 'z:/barker/clif_temp'
 project_location <- 'z:/barker/projects/CLIF_prone_incidence'
 site <- "UMich"
+
 #Create Sub Folders within Project Folder
 # Check if the output directory exists; if not, create it
 if (!dir.exists(paste0(project_location, "/project_tables"))) {
@@ -526,7 +527,7 @@ cat('\n At', site,',', length(unique(vent_eligible$hospitalization_id[vent_eligi
 #Vent Eligible Excluding Early Trach
 vent_eligible <- vent_eligible |>
   filter(trach_within_24!=1)
-rm(trach)
+#rm(trach)
 #Update Cohort_IDs
 #List of patient_id, encounter_block, hospitalization_id and vent_start
 temp_ids <- vent_eligible |>
@@ -603,7 +604,7 @@ rm(temp_ids)
 ```{r Clean CLIF Labs Data for PaO2 and Merge with Respiratory Support for P/F Ratios}
 #Will Use cohort_ids table and vent start to filter to relevant hospitalizations and times
 vent_times <- vent_eligible |>
-  select(patient_id, encounter_block, vent_episode_end, vent_episode_start,tracheostomy, first_trach_time, vent_duration_hours, liberation)
+  select(patient_id, encounter_block, vent_episode_end, vent_episode_start,first_trach_time, vent_duration_hours, liberation)
 
 #Filter Labs Table to Just Hospitaliztion IDs in the Cohort
 clif_labs <- clif_labs |>
@@ -620,7 +621,7 @@ pao2 <- clif_labs |>
   distinct() |>
   select(patient_id, encounter_block, lab_result_dttm, lab_value_numeric) |>
   collect() |>
-  mutate(recorded_dttm=as.POSIXct(lab_result_dttm)) |> #For Merging with Vent Data
+  mutate(recorded_dttm=as.POSIXct(lab_result_dttm, tz="UTC")) |> #For Merging with Vent Data
   rename(pao2 = lab_value_numeric) 
 
 
@@ -631,40 +632,44 @@ vent_data <- clif_respiratory_support |>
   filter(in_cohort==1) |>
   left_join(vent_times) |>
   collect() |>
-  filter(recorded_dttm>=as.POSIXct(vent_episode_start) & recorded_dttm<=as.POSIXct(vent_episode_end)) |>
+  mutate(recorded_dttm=as.POSIXct(recorded_dttm, tz = 'UTC')) |>
+  filter(recorded_dttm>=as.POSIXct(vent_episode_start, tz="UTC") & recorded_dttm<=as.POSIXct(vent_episode_end,tz="UTC")) |>
   arrange(patient_id, encounter_block, recorded_dttm) |>  
   group_by(patient_id, encounter_block) |>
   fill(device_category, device_name, .direction = 'down') |>
-  mutate(recorded_dttm=as.POSIXct(recorded_dttm)) |> #to merge with pao2 data
+  mutate(recorded_dttm=as.POSIXct(recorded_dttm, tz= 'UTC')) |> #to merge with pao2 data
   ungroup() |>
   #Bring in PaO2 Here and Then Fill Again
   join(pao2, how ='full') |>
   group_by(patient_id, encounter_block) |>
   fill(vent_episode_end, vent_episode_start, .direction = 'downup') |>
-  filter(recorded_dttm>=as.POSIXct(vent_episode_start) & recorded_dttm<=as.POSIXct(vent_episode_end)) |>
+  filter(recorded_dttm>=as.POSIXct(vent_episode_start, tz="UTC") & recorded_dttm<=as.POSIXct(vent_episode_end, tz="UTC")) |>
   arrange(patient_id, encounter_block, recorded_dttm) |>  
   fill(device_category, device_name, .direction = 'down') |>
   #Now Group by Patient/Encounter/device_category and fill peep and fio2
   group_by(patient_id, encounter_block, device_category) |>
+  mutate(ever_tracheostomy=tracheostomy) |>
   fill(peep_set, 
        fio2_set, 
        vent_episode_start,
        vent_episode_end,
        mode_category,
-       tracheostomy,
        first_trach_time,
        liberation,
        vent_duration_hours,
+       hospitalization_id,
+       ever_tracheostomy,
        .direction = 'downup') |>
-  ungroup() 
+  fill(tracheostomy, .direction= 'down') |>
+    ungroup() 
 
 #Quality Check FiO2 and PEEP Data
 #Calculate PF
 #Indicate if 'proseva_eligible'
 vent_data <- vent_data |>
   mutate(fio2_set=fifelse(
-    fio2_set<0.21 | fio2_set>1, NaN, fio2_set)) |>
-  #   fio2_set<21 | fio2_set>100, NaN, fio2_set/100)) |>
+  fio2_set<0.21 | fio2_set>1, NaN, fio2_set)) |>
+#     fio2_set<21 | fio2_set>100, NaN, fio2_set/100)) |>
   mutate(peep_set=fifelse(
     peep_set<0 | peep_set>35, NaN, peep_set)) |>
   #Now Calculate PF Ratios
@@ -737,7 +742,7 @@ proseva_criteria <- vent_data |>
   #This Table is Already Windowed to First 72 Hours of Vent and Ends When patient is extubated/dies/transfers (if before 72 hours)
   mutate(eligible_proseva_t2=fifelse(
     recorded_dttm>=as.POSIXct(t_proseva_first, tz="UTC")+dhours(12) & 
-    recorded_dttm<=as.POSIXct(t_proseva_first, tz="UTC")+dhours(24), 1, 0
+    recorded_dttm<=as.POSIXct(t_proseva_first, tz="UTC")+dhours(24), 1, 0 # since this is set as 0 when not true, fill updown doesn't overwrite it. 
   )) |>
   group_by(patient_id, encounter_block, eligible_proseva_t2, proseva_eligible) |>
   arrange(patient_id, encounter_block, recorded_dttm) |>
@@ -771,9 +776,9 @@ proseva_criteria <- vent_data |>
     !is.na(first_proseva_pf) & !is.na(second_proseva_pf), 1, 0
   )) |>
   #Select Wanted Variables and Keep First Row for Each Patient and Encounter Block
-  select(patient_id, encounter_block, first_proseva_pf:eligible_by_proseva) |>
+  select(patient_id, encounter_block, first_proseva_pf:eligible_by_proseva, ever_tracheostomy) |>
   group_by(patient_id, encounter_block) |>
-  filter(row_number()==1) |>
+  filter(row_number()==1) |> #by selecting first row number, proseva_second_eligible ==0  if not missing, fine bc won't use it anymore
   ungroup()
 
 ```
@@ -890,9 +895,22 @@ proseva_prone_table <- proseva_criteria |>
     (as.duration(first_prone_time-t_enrollment)<=dhours(12)), 1,
     (as.duration(first_prone_time-t_enrollment)>dhours(12)), 0,
     !is.na(t_enrollment) & proned==0, 0
-  ))
+  )) |>
+
+  #Secondary Outcomes include proning within 24h and 72h of enrollment
+  mutate(prone_24hour_outcome=fcase(
+    (as.duration(first_prone_time-t_enrollment)<=dhours(24)), 1,
+    (as.duration(first_prone_time-t_enrollment)>dhours(24)), 0,
+    !is.na(t_enrollment) & proned==0, 0
+  )) |>
+  mutate(prone_72hour_outcome=fcase(
+    (as.duration(first_prone_time-t_enrollment)<=dhours(72)), 1,
+    (as.duration(first_prone_time-t_enrollment)>dhours(72)), 0,
+    !is.na(t_enrollment) & proned==0, 0
+  ))   
 
 ```
+
 ```{r Now Build Final Cohort}
 prone_incidence_cohort <- vent_eligible |>
   left_join(proseva_prone_table) |>
@@ -971,8 +989,8 @@ hospital_location <- clif_adt |>
   arrange(patient_id, encounter_block, in_dttm) |>
   collect() |>
   mutate(enrollment_icu=fifelse(
-    as.POSIXct(t_enrollment)>=as.POSIXct(in_dttm) &
-      as.POSIXct(t_enrollment)<=as.POSIXct(out_dttm), 1,0
+    as.POSIXct(t_enrollment, tz="UTC")>=as.POSIXct(in_dttm, tz="UTC") &
+      as.POSIXct(t_enrollment, tz="UTC")<=as.POSIXct(out_dttm, tz="UTC"), 1,0
   )) |>
   #If the Patient Meets Criteria in an ED or Procedural Area Take the First Non Procedural Location After This Row
   group_by(patient_id, encounter_block) |>
@@ -1003,8 +1021,8 @@ hospital_location <- clif_adt |>
   #If the Patient Meets Criteria in an Operative Area Take the First Non Procedural Location Before or After
   mutate(or_before_enrollment=fifelse(
     tolower(location_category) =='procedural' & 
-      as.POSIXct(in_dttm)>=as.POSIXct(t_enrollment)-ddays(7) &
-      as.POSIXct(in_dttm)<=as.POSIXct(t_enrollment), 1, 0
+      as.POSIXct(in_dttm, tz="UTC")>=as.POSIXct(t_enrollment, tz="UTC")-ddays(7) &
+      as.POSIXct(in_dttm, tz="UTC")<=as.POSIXct(t_enrollment, tz="UTC"), 1, 0
   )) |>
   group_by(patient_id, encounter_block) |>
   mutate(or_before_enrollment=max(or_before_enrollment, na.rm = TRUE)) |>
@@ -1080,8 +1098,8 @@ temp_times <- cohort_times |>
 min_pf <- vent_data |>
   filter(!is.na(pf_ratio)) |>
   join(temp_times, how = 'left') |>
-  filter(as.POSIXct(recorded_dttm)>=as.POSIXct(vent_episode_start) &
-           as.POSIXct(recorded_dttm)<=as.POSIXct(t_enrollment)) |>
+  filter(as.POSIXct(recorded_dttm, tz="UTC")>=as.POSIXct(vent_episode_start, tz="UTC") &
+           as.POSIXct(recorded_dttm, tz="UTC")<=as.POSIXct(t_enrollment, tz="UTC")) |>
   group_by(patient_id, encounter_block) |>
   mutate(min_pf_ratio=min(pf_ratio, na.rm = TRUE)) |>
   filter(row_number()==1) |>
@@ -1215,7 +1233,7 @@ prone_analytic_data <- hospitalization_vars |>
       tolower(ethnicity_category) %in% c('non-hispanic'), 'Black, non-Hispanic',
     tolower(race_category)=='asian', 'Asian',
     tolower(race_category) %!in% c('white', 'black or african american', 'asian', 'unknown'), 'other',
-    tolower(race_category)=='unknown', 'unknown')) |>
+    (tolower(race_category)=='unknown'| is.na(race_category)), 'unknown')) |>
   mutate(race_ethnicity) |>
   select(-mode_category, -device_category) |>
   #Calculate Time from Admission to Enrollment
@@ -1225,6 +1243,9 @@ prone_analytic_data <- hospitalization_vars |>
     proned==1, as.duration(first_prone_time-t_enrollment)/dhours(1), NaN)) |>
   distinct()
 rm(bmi, demos, hospitalization_vars, hospital_location, min_pf, norepi_equivalent)
+
+or_table<-table(prone_analytic_data$prone_12hour_outcome, prone_analytic_data$or_before_enrollment, useNA = "always")
+write.csv(or_table, file=paste0(project_location, '/project_output/', site, '_OR_proning.csv'))
 
 write_parquet(prone_analytic_data, paste0(project_location, '/project_tables/prone_analytic_data.parquet'))
 ```
