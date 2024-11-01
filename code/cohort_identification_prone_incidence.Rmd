@@ -8,9 +8,9 @@ output: html_document
 #Specify File Paths, Project Path and Site - SITE SPECIFIC
 #Load the Required CLIF Tables (or if using ARROW/parquet refer to table in situ on storage drive)
 ```{r}
-tables_location <- '~/workspace/Storage/chochbe1/JH_CCRD/CLIF/rclif'
-project_location <- '~/workspace/Storage/chochbe1/JH_CCRD/CLIF/CLIF_Projects/CLIF_prone_incidence'
-site <- "Hopkins"
+tables_location <- 'z:/barker/clif_temp'
+project_location <- 'z:/barker/clif_temp/output/proning'
+site <- "U Michigan"
 file_type <- 'parquet'
 
 
