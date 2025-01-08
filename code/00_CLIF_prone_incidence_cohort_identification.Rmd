@@ -8,10 +8,10 @@ output: html_document
 #Specify File Paths, Project Path and Site - SITE SPECIFIC
 #Load the Required CLIF Tables (or if using ARROW/parquet refer to table in situ on storage drive)
 ```{r}
-tables_location <- 'z:/barker/clif_temp'
-project_location <- 'z:/barker/clif_temp/output/proning'
-site <- "U Michigan"
-file_type <- 'parquet'
+tables_location <- '~/workspace/Storage/chochbe1/JH_CCRD/CLIF/rclif'
+project_location <- '~/workspace/Storage/chochbe1/JH_CCRD/CLIF/CLIF_Projects/CLIF_prone_incidence'
+site <- "Hopkins"
+file_type <- "parquet"
 
 
 #Create Sub Folders within Project Folder
@@ -1022,7 +1022,7 @@ hospital_location <- clif_adt |>
   #If the Patient Meets Criteria in an Operative Area Take the First Non Procedural Location Before or After
   mutate(or_before_enrollment=fifelse(
     tolower(location_category) =='procedural' & 
-      as.POSIXct(in_dttm, tz="UTC")>=as.POSIXct(t_enrollment, tz="UTC")-ddays(7) &
+      as.POSIXct(in_dttm, tz="UTC")>=as.POSIXct(t_enrollment, tz="UTC")-ddays(2) &
       as.POSIXct(in_dttm, tz="UTC")<=as.POSIXct(t_enrollment, tz="UTC"), 1, 0
   )) |>
   group_by(patient_id, encounter_block) |>
