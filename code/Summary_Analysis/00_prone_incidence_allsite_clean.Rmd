@@ -619,6 +619,19 @@ prone_summary <- prone_per_month |>
   ungroup() |> arrange(site)
 write_csv(prone_summary, paste0(project_location, '/summary_output/prone_summary_clif.csv'))
 
+#Prone Summary by Period
+prone_by_period <- prone_per_month |>
+  group_by(site, study_period) |>
+  summarise(
+    n_in_period = sum(n_patients, na.rm=TRUE),
+    proned_12_hr=sum(sum(n_proned_12_hr, na.rm = TRUE)),
+    proned_12_hr_percent = round((sum(n_proned_12_hr, na.rm = TRUE) / n_in_period) * 100, 1),
+    proned_72_hr_percent = round((sum(n_proned_72_hr, na.rm = TRUE) / n_in_period) * 100, 1),
+    proned_24_hr_percent = round((sum(n_proned_24_hr, na.rm = TRUE) / n_in_period) * 100, 1),
+    proned_all_percent = round((sum(n_proned_all, na.rm = TRUE) / n_in_period) * 100, 1)
+  ) |>
+  ungroup() |> arrange(study_period)
+write_csv(prone_by_period, paste0(project_location, '/summary_output/prone_by_period_clif.csv'))
 
 ```
 
