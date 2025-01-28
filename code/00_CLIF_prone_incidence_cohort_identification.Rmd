@@ -8,9 +8,9 @@ output: html_document
 #Specify File Paths, Project Path and Site - SITE SPECIFIC
 #Load the Required CLIF Tables (or if using ARROW/parquet refer to table in situ on storage drive)
 ```{r}
-tables_location <- '~/workspace/Storage/chochbe1/JH_CCRD/CLIF/rclif'
-project_location <- '~/workspace/Storage/chochbe1/JH_CCRD/CLIF/CLIF_Projects/CLIF_prone_incidence'
-site <- "Hopkins"
+tables_location <- 'Z:/barker/clif_temp'
+project_location <- 'Z:/barker/clif_temp/Proning_Project'
+site <- "Michigan"
 file_type <- "parquet"
 
 
@@ -75,7 +75,7 @@ Patient is proned within 24 hours of initial qualifying blood gas (t_PROSEVA_fir
 Specify the start and end dates for the cohort
 ```{r Start Times and Whether Pediatric Patients Are Included}
 start_date <- "2018-01-01"
-end_date <- "2023-12-31"
+end_date <- "2024-12-31"
 
 include_pediatric <- FALSE
 include_er_deaths <- TRUE
@@ -93,7 +93,7 @@ tables <- c("patient", "hospitalization", "vitals", "labs",
             "therapy_details", "microbiology_culture", "sensitivity", "microbiology_nonculture")
 
 # Tables that should be set to TRUE for this project
-true_tables <- c("patient", "hospitalization", "adt",
+true_tables <- c("patient", "hospitalization", "adt", "patient_assessments",
                  "vitals", "labs", "medication_admin_continuous", "respiratory_support",
                  "position")
 
@@ -790,13 +790,25 @@ proseva_criteria <- vent_data |>
 temp_times <- vent_times |> 
   select(patient_id, encounter_block, vent_episode_start, vent_episode_end)
 
-prone_episodes <- clif_position |>
+prone_episodes_all <- clif_position |>
   left_join(cohort_ids) |> #NOTE: clif_labs will now include patient_id and encounter_block
   filter(in_cohort==1) |>
   filter(!is.na(position_category)) |>
   select(-in_cohort) |>
   left_join(temp_times) |>
-  collect() |>
+  collect()
+
+#output position data for categories >= 10 times while prone
+position_output<- data.frame(table(prone_episodes_all$position_category, prone_episodes_all$position_name, useNA = "always"))
+position_output<- position_output %>% filter(Freq>10) # if happening less than 10 times, don't output
+position_output<- position_output %>% rename(position_category=Var1) 
+position_output<- position_output %>% rename(position_name=Var2)
+position_output<- position_output %>% filter(position_category=="prone") 
+position_output$semi_prone<- grepl("semi", position_output$position_name, ignore.case = TRUE)  
+if(any(position_output$semi_prone==TRUE)) warning("QC: You may have semi-prone data mapped to the proned position_category. Patients in a semi-proned position should not be considered prone unless there is an additional prone documentation at the same time. Please review your position-name to position_category mapping to determine how semi-prone data is mapped to position_category") 
+write_csv(position_output, paste0(project_location, "/project_output/",site, "_position_output.csv")) 
+  
+prone_episodes <- prone_episodes_all |>
   mutate(recorded_dttm=as.POSIXct(recorded_dttm, tz="UTC")) |>
   filter(recorded_dttm>=as.POSIXct(vent_episode_start, tz="UTC") & recorded_dttm<=as.POSIXct(vent_episode_end, tz="UTC")) |>
   #Filter to Rows Where 'position_category' changes --> This will allow some institutions to select 'all positions' and some to only keep rows where position changes (as I did in my CLIF ETL)
@@ -936,7 +948,7 @@ n_patients <- length(unique(prone_incidence_cohort$patient_id))
 prone_incidence_cohort <- prone_incidence_cohort |>
   filter(cohort_eligible==1) |>
   #Filter Out Those with t_enrollment in 2024
-  filter(year(t_enrollment)<2024) |>
+  filter(year(t_enrollment)<2025) |>
   #For patient_ids with more than one encounter block, select one at random
   group_by(patient_id) |>
   slice_sample(n=1) |>
@@ -1109,7 +1121,7 @@ min_pf <- vent_data |>
 rm(temp_times)
 
 #Calculate Norepinephrine Equivalent
-norepi_equivalent <- clif_medication_admin_continuous |>
+pressor_data <- clif_medication_admin_continuous |>
   filter(hospitalization_id %in% cohort_hospitalization_ids$hospitalization_id) |>
   left_join(cohort_hospitalization_ids) |>
   filter(in_cohort==1) |>
@@ -1121,7 +1133,7 @@ norepi_equivalent <- clif_medication_admin_continuous |>
   collect() |>
   mutate(med_dose=as.character(med_dose)) |>
   mutate(med_dose = as.numeric(parse_number(med_dose))) |>
-  filter(as.POSIXct(admin_dttm)>=as.POSIXct(t_enrollment)-dhours(12) & 
+  filter(as.POSIXct(admin_dttm)>=as.POSIXct(t_enrollment)-dhours(24) & 
            as.POSIXct(admin_dttm)<=as.POSIXct(t_enrollment)) |>
   #Define if a Pressor Needs Weight Based Dosing
   mutate(needs_wt_based=fifelse((med_dose_unit=="mcg/min" | med_dose_unit=="mg/min" | med_dose_unit=="ng/min"), 1, 0)) |>
@@ -1132,7 +1144,7 @@ norepi_equivalent <- clif_medication_admin_continuous |>
     needs_wt_based==1, med_dose/study_weight_kg)) |>
   group_by(patient_id, encounter_block) |>
   mutate(norepi_dose=fcase(med_category=="norepinephrine" , wt_dose
-)) |>
+  )) |>
   fill(norepi_dose, .direction ="down") |>
   mutate(norepi_on=fcase(
     norepi_dose > 0 , 1,
@@ -1145,7 +1157,7 @@ norepi_equivalent <- clif_medication_admin_continuous |>
   mutate(epi_on=fcase(
     epi_dose>0 , 1,
     (is.na(epi_dose) | epi_dose==0) , 0 )) |>
-  mutate(epi_dose=fifelse(is.na(epi_dose), 0, norepi_dose)) |>
+  mutate(epi_dose=fifelse(is.na(epi_dose), 0, epi_dose)) |>
   mutate(phenyl_dose=fcase(
     med_category=="phenylephrine" , wt_dose
   )) |>
@@ -1197,26 +1209,146 @@ norepi_equivalent <- clif_medication_admin_continuous |>
     isoproterenol_dose>0 , 1,
     (is.na(isoproterenol_dose) |isoproterenol_dose==0) , 0 )) |>
   ungroup() |>
-  #See Lambden et al for Norepi dose equivalents for Epi, Phenyl, Vaso, Dopa, Angiotensin)
-  mutate(pressor_on=(norepi_on + epi_on + phenyl_on + vaso_on + dopa_on + angiotensin_on)) |>
-  #Norepi Equivalents: 1=1 low dose pressor, 2=1 moderate or high dose pressor, 3=2 or more pressors, 0 is 0 pressors
-   mutate(norepi_equivalent=case_when( #norepi_dose + epi_dose+ vaso_dose*2.5/60+ angiotensin_dose/100+ dopa_dose/100+ phenyl_dose/10)|>
-       (norepi_dose<=0.15 | epi_dose <= 0.15 | 
-          phenyl_dose <= 1.5 | angiotensin_dose/100<=0.15) & pressor_on==1 ~ 1,
-       (norepi_dose> 0.15 | epi_dose > 0.15 | 
-          phenyl_dose > 1.5 | dopa_dose > 22 | angiotensin_dose/100>0.15) & pressor_on==1 ~ 2,
-       (vaso_dose<=0.04 | vaso_dose/60 <=0.04) & pressor_on==1 ~ 1,
-       pressor_on > 1 ~ 2,
-       dopa_dose <= 22 & pressor_on==1 ~ 1,
-       pressor_on==0 ~ 0)) |>
-   #Now Select Max In this 12 Hour Period
-   group_by(patient_id, encounter_block) |>
-   mutate(max_norepi_equivalent=max(norepi_equivalent, na.rm = TRUE)) |>
-   filter(row_number()==1) |>
-   select(patient_id, encounter_block, max_norepi_equivalent, norepi_dose, epi_dose, vaso_dose, angiotensin_dose, dopa_dose, phenyl_dose) |>
-   ungroup()
+  #See Kotani et al for Norepi dose equivalents for Epi, Phenyl, Vaso, Dopa, Angiotensin)
+  mutate(pressor_on=(norepi_on + epi_on + phenyl_on + vaso_on + dopa_on + angiotensin_on)) |> 
+  mutate(norepi_equivalent=norepi_dose + epi_dose+ vaso_dose*2.5+ angiotensin_dose*0.0025+ dopa_dose/100+ phenyl_dose*0.06) |>
+  mutate(sofa_pressor=case_when((dopa_dose>0 & dopa_dose<=5) | dobut_dose>0~2, dopa_dose>5 | (epi_dose>0 & epi_dose <=0.1) | (norepi_dose>0 & norepi_dose<=0.1) ~3, dopa_dose>15 | epi_dose>0.1 | norepi_dose>0.1 ~4, pressor_on==0~0)) |>
+  mutate(sofa_pressor=case_when(is.na(sofa_pressor)~0, is.na(sofa_pressor)==F~sofa_pressor)) |>
+  collect()
 
-#Merge Files Together
+#Select max sofa pressor in 24h period
+sofa_pressors <- pressor_data |>
+  group_by(patient_id, encounter_block) |>
+  mutate(max_sofa_pressor=max(sofa_pressor, na.rm = TRUE)) |>
+  filter(row_number()==1) |>
+  select(patient_id, encounter_block, max_sofa_pressor) |> #, norepi_dose, epi_dose, vaso_dose, angiotensin_dose, dopa_dose, phenyl_dose) |>
+  ungroup()
+
+#Now Select Max NEE In this 12 Hour Period 
+  norepi_equivalent <- pressor_data |>
+  filter(as.POSIXct(admin_dttm)>=as.POSIXct(t_enrollment)-dhours(12) & 
+           as.POSIXct(admin_dttm)<=as.POSIXct(t_enrollment)) |>
+  group_by(patient_id, encounter_block) |>
+  mutate(max_norepi_equivalent=max(norepi_equivalent, na.rm = TRUE)) |>
+  filter(row_number()==1) |>
+  mutate(nee_pressor_dose=case_when(max_norepi_equivalent==0~0, max_norepi_equivalent>0 & max_norepi_equivalent<=0.1~1, max_norepi_equivalent>.1~2)) |>
+  select(patient_id, encounter_block, nee_pressor_dose) |> #, norepi_dose, epi_dose, vaso_dose, angiotensin_dose, dopa_dose, phenyl_dose) |>
+  ungroup()
+
+# Calculate lowest GCS for sofa in 24h prior to enrollment
+sofa_gcs <- clif_patient_assessments |>
+  filter(assessment_category == "gcs_total") |> 
+  filter(hospitalization_id %in% cohort_hospitalization_ids$hospitalization_id) |> 
+  #Filter Outliers  
+  filter(numerical_value<=15 & numerical_value>=3) |>
+  collect() |>
+  join(cohort_hospitalization_ids, how = 'left') |>
+  join(cohort_times, how = 'left') |>
+  #Pick in 24h prior to enrollment
+  filter(as.POSIXct(recorded_dttm)>=as.POSIXct(t_enrollment)-dhours(24) & 
+           as.POSIXct(recorded_dttm)<=as.POSIXct(t_enrollment)) |>
+  mutate(sofa_gcs=case_when(numerical_value==15~0,  numerical_value==13 | numerical_value==14~1, numerical_value>=10 & numerical_value<=12~2, numerical_value>=6 & numerical_value<=9~3, numerical_value<6~4)) |> 
+  group_by(patient_id, encounter_block) |>
+  mutate(max_sofa_gcs=max(sofa_gcs, na.rm = TRUE)) |>
+  filter(row_number()==1) |>
+  select(patient_id, encounter_block, max_sofa_gcs) |> 
+  ungroup()
+
+# Calculate lowest RASS for sofa in 24h prior to enrollment
+sofa_rass <- clif_patient_assessments |> 
+  filter(assessment_category == "RASS") |> 
+  filter(hospitalization_id %in% cohort_hospitalization_ids$hospitalization_id) |> 
+  #Filter Outliers  
+  filter(numerical_value<=4 & numerical_value>-6) |>
+  collect() |>
+  join(cohort_hospitalization_ids, how = 'left') |>
+  join(cohort_times, how = 'left') |>
+  #Pick in 24h prior to enrollment
+  filter(as.POSIXct(recorded_dttm)>=as.POSIXct(t_enrollment)-dhours(24) & 
+           as.POSIXct(recorded_dttm)<=as.POSIXct(t_enrollment)) |> 
+  mutate(sofa_rass=case_when(numerical_value>-1~0,  numerical_value==-1~1, numerical_value==-2~2, numerical_value==-3~3, numerical_value==-4 | numerical_value==-5~4)) |> 
+  group_by(patient_id, encounter_block) |>
+  mutate(max_sofa_rass=max(sofa_rass, na.rm = TRUE)) |>
+  filter(row_number()==1) |>
+  select(patient_id, encounter_block, max_sofa_rass) |> 
+  ungroup()
+
+#Calculate Lowest MAP 24h prior to enrollment for SOFA
+sofa_map <- clif_vitals |>
+  filter(vital_category %in% c('map')) |>
+  filter(hospitalization_id %in% cohort_hospitalization_ids$hospitalization_id) |>
+  #Filter Outliers MAP>250
+  filter(vital_value<=250) |>
+  collect() |>
+  join(cohort_hospitalization_ids, how = 'left') |>
+  join(cohort_times, how = 'left') |>
+  #Pick Lowest MAP in 24h prior to enrollment
+  filter(as.POSIXct(recorded_dttm)>=as.POSIXct(t_enrollment)-dhours(24) & 
+           as.POSIXct(recorded_dttm)<=as.POSIXct(t_enrollment)) |>
+  mutate(sofa_map=case_when(vital_value<70~1, vital_value>=70~0)) |>
+  group_by(patient_id, encounter_block) |>
+  mutate(max_sofa_map=max(sofa_map, na.rm = TRUE)) |>
+  filter(row_number()==1) |>
+  select(patient_id, encounter_block, max_sofa_map) |> #, norepi_dose, epi_dose, vaso_dose, angiotensin_dose, dopa_dose, phenyl_dose) |>
+  ungroup()
+
+#Calculate highest bilirubin in 24h prior to enrollment for sofa
+sofa_bili <- clif_labs |>
+  filter(lab_category %in% c('bilirubin_total')) |>
+  filter(hospitalization_id %in% cohort_hospitalization_ids$hospitalization_id) |>
+  #Filter Outliers  
+  filter(lab_value_numeric<=80) |>
+  collect() |>
+  join(cohort_hospitalization_ids, how = 'left') |>
+  join(cohort_times, how = 'left') |>
+  #Pick in 24h prior to enrollment
+  filter(as.POSIXct(lab_collect_dttm)>=as.POSIXct(t_enrollment)-dhours(24) & 
+           as.POSIXct(lab_collect_dttm)<=as.POSIXct(t_enrollment)) |>
+  mutate(sofa_bili=case_when(lab_value_numeric<1.2~0,  lab_value_numeric>=1.2 & lab_value_numeric<2~1, lab_value_numeric>=2 & lab_value_numeric<6~2, lab_value_numeric>=6 & lab_value_numeric<12~3, lab_value_numeric>=12~4)) |> 
+  group_by(patient_id, encounter_block) |>
+  mutate(max_sofa_bili=max(sofa_bili, na.rm = TRUE)) |>
+  filter(row_number()==1) |>
+  select(patient_id, encounter_block, max_sofa_bili) |> 
+  ungroup()
+
+#Calculate lowest platelets in 24h prior to enrollment for sofa
+sofa_plt <- clif_labs |>
+  filter(lab_category %in% c('platelet_count')) |>
+  filter(hospitalization_id %in% cohort_hospitalization_ids$hospitalization_id) |>
+  #Filter Outliers 
+  filter(lab_value_numeric<=2000) |>
+  collect() |>
+  join(cohort_hospitalization_ids, how = 'left') |>
+  join(cohort_times, how = 'left') |>
+  #Pick Lowest in 24h prior to enrollment
+  filter(as.POSIXct(lab_collect_dttm)>=as.POSIXct(t_enrollment)-dhours(24) & 
+           as.POSIXct(lab_collect_dttm)<=as.POSIXct(t_enrollment)) |> 
+  mutate(sofa_plt=case_when(lab_value_numeric<20~4,  lab_value_numeric>=20 & lab_value_numeric<50~3, lab_value_numeric>=50 & lab_value_numeric<100~2, lab_value_numeric>=100 & lab_value_numeric<150~1, lab_value_numeric>=150~0)) |> 
+  group_by(patient_id, encounter_block) |>
+  mutate(max_sofa_plt=max(sofa_plt, na.rm = TRUE)) |>
+  filter(row_number()==1) |>
+  select(patient_id, encounter_block, max_sofa_plt) |> 
+  ungroup()
+
+#Calculate highest cr in 24h prior to enrollment for sofa
+sofa_cr <- clif_labs |>
+  filter(lab_category %in% c('creatinine')) |>
+  filter(hospitalization_id %in% cohort_hospitalization_ids$hospitalization_id) |>
+  #Filter Outliers 
+  filter(lab_value_numeric<=20) |>
+  collect() |>
+  join(cohort_hospitalization_ids, how = 'left') |>
+  join(cohort_times, how = 'left') |>
+  #Pick Lowest in 24h prior to enrollment
+  filter(as.POSIXct(lab_collect_dttm)>=as.POSIXct(t_enrollment)-dhours(24) & 
+           as.POSIXct(lab_collect_dttm)<=as.POSIXct(t_enrollment)) |> 
+  mutate(sofa_cr=case_when(lab_value_numeric<1.2~0,  lab_value_numeric>=1.2 & lab_value_numeric<2~1, lab_value_numeric>=2 & lab_value_numeric<3.5~2, lab_value_numeric>=3.5 & lab_value_numeric<5~3, lab_value_numeric>=5~4)) |> 
+  group_by(patient_id, encounter_block) |>
+  mutate(max_sofa_cr=max(sofa_cr, na.rm = TRUE)) |>
+  filter(row_number()==1) |>
+  select(patient_id, encounter_block, max_sofa_cr) |> 
+  ungroup()
+  
 prone_analytic_data <- hospitalization_vars |>
   left_join(demos) |>
   left_join(hospital_location) |>
@@ -1224,8 +1356,21 @@ prone_analytic_data <- hospitalization_vars |>
   left_join(prone_incidence_cohort) |>
   left_join(min_pf) |>
   left_join(norepi_equivalent) |>
+  left_join(sofa_pressors) |>
+  left_join(sofa_map) |>
+  left_join(sofa_rass) |>
+  left_join(sofa_gcs) |>
+  left_join(sofa_bili) |>
+  left_join(sofa_cr) |>
+  left_join(sofa_plt) |>
+
   #IF norepi equivalent is missing it means patient had no vasoactives recorded
-  mutate(max_norepi_equivalent=fifelse(is.na(max_norepi_equivalent), 0, max_norepi_equivalent)) |>
+  mutate(nee_pressor_dose=fifelse(is.na(nee_pressor_dose), 0, nee_pressor_dose)) |>
+  mutate(max_sofa_pressor=fifelse(is.na(max_sofa_pressor), 0, max_sofa_pressor)) |>
+  mutate(max_sofa_bili=fifelse(is.na(max_sofa_bili), 0, max_sofa_bili)) |>
+  mutate(max_sofa_hemodynamics=case_when(max_sofa_pressor>1~max_sofa_pressor, max_sofa_pressor<2~max_sofa_map)) |> 
+  mutate(max_sofa_ams=case_when(max_sofa_gcs>=max_sofa_rass | is.na(max_sofa_rass)~max_sofa_gcs, max_sofa_gcs<max_sofa_rass | is.na(max_sofa_gcs)~max_sofa_rass)) |> 
+  mutate(sofa_score=max_sofa_plt + max_sofa_ams + max_sofa_bili + max_sofa_hemodynamics + max_sofa_cr) |>
   select(-hospitalization_id) |>
   #Race and ethnicity mappings: 1=white, non hispanic, 2=hispanic, regardless of race, 3=black non-hispanic, 4=asian, non-hispanic, 5=other, 6=Unknown
   mutate(race_ethnicity=fcase(
@@ -1251,7 +1396,10 @@ or_table<-table(prone_analytic_data$prone_12hour_outcome, prone_analytic_data$or
 write.csv(or_table, file=paste0(project_location, '/project_output/', site, '_OR_proning.csv'))
 
 write_parquet(prone_analytic_data, paste0(project_location, '/project_tables/prone_analytic_data.parquet'))
+
+
 ```
+
 
 ```{r}
 ## Export the list of `hospitalization_id` for the identified patients
