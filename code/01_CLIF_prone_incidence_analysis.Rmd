@@ -8,9 +8,9 @@ output: html_document
 #Specify File Paths, Project Path and Site - SITE SPECIFIC
 #Load the Analytic File
 ```{r}
-tables_location <- 'Z:/barker/clif_temp'
-project_location <- 'Z:/barker/clif_temp/Proning_Project'
-site <- "Michigan"
+tables_location <- '~/workspace/Storage/chochbe1/JH_CCRD/CLIF/rclif'
+project_location <- '~/workspace/Storage/chochbe1/JH_CCRD/CLIF/CLIF_Projects/CLIF_prone_incidence'
+site <- "Hopkins"
 file_type <- "parquet"
 ```
 
@@ -60,7 +60,7 @@ prone_analytic_df <- open_dataset(paste0(project_location, '/project_tables/pron
 
 #Additional Cleaning of Analytic Dataset
 #Includes Finalzing Covariates
-```{r Start Times and Whether Pediatric Patients Are Included}
+```{r Define Study Months/Quarters}
 #Further Define sex_category as female 1, male/other/unknown 0
 prone_analytic_df <- prone_analytic_df |>
   mutate(female=fifelse(tolower(sex_category)=='female', 1, 0)) |>
@@ -147,7 +147,8 @@ prone_per_month <- prone_analytic_df |>
     'standard_error_all' = sqrt(mean(proned) * (1 - mean(proned)) / n())
   ) |>
   relocate(site, n_hospitals, .before = study_month)
-write_csv(prone_per_month, paste0(project_location, '/project_output/', site,'_prone_per_month.csv'))
+#Save Locally At Each Site but Don't Export as May have 1 Patient Per Month
+write_csv(prone_per_month, paste0(project_location, '/project_tables/', site,'_prone_per_month.csv'))
 
 #Create a Table of N of Patients and Number Proned Per Study Month Per Hospital
 prone_per_month_by_hospital <- prone_analytic_df |> 
@@ -173,7 +174,7 @@ prone_per_month_by_hospital <- prone_analytic_df |>
     'standard_error_all' = sqrt(mean(proned) * (1 - mean(proned)) / n())
   ) |>
   relocate(site, n_hospitals, .before = study_month)
-write_csv(prone_per_month_by_hospital, paste0(project_location, '/project_output/', site,'_prone_per_month_hospital.csv'))
+write_csv(prone_per_month_by_hospital, paste0(project_location, '/project_tables/', site,'_prone_per_month_hospital.csv'))
 
 
 #Repeat Per Study Period
@@ -307,12 +308,7 @@ factors_tab <- c(
 
 #First Create Table with Ranges and Additional Statistics Including Numbers of Missing and Min/Max
 tab1 <- CreateTableOne(vars = to_tab, data=prone_analytic_df, factorVars = factors_tab)
-summary(tab1) #This will be in HTML File
-sink(paste0(project_location, '/project_output/', site, '_table1_missing_ranges.doc'))
-#Repeat to Create Word File
-summary(tab1)
-# Stop saving output to the file
-sink() 
+summary(tab1) 
 
 #Now Create a Traditional Table 1, One Stratified by Period and One Stratified by Hospital
 tab1 <- CreateTableOne(vars = to_tab, strata="study_period", data=prone_analytic_df, factorVars = factors_tab, addOverall = TRUE) 
@@ -855,6 +851,15 @@ ame_summary <- function(model_list) {
   
   return(final_results)  # Return the final combined table
 }
+
+#To Aid In Intrepretability Plan to Scale Each of The Continuous Variables
+prone_analytic_df <- prone_analytic_df |>
+  mutate(
+    age_scale=as.numeric(scale(age_at_admission)),
+    bmi_scale=as.numeric(scale(bmi)),
+    min_pf_ratio_scale=as.numeric(scale(min_pf_ratio)),
+    sofa_score_scale=as.numeric(scale(sofa_score))
+  )
 ```
 
 
@@ -912,9 +917,11 @@ write.csv(univar_ame, paste0(project_location, '/project_output/', site, '_unadj
 
 ```{r Adjusted Segmented Regression}
 #Agreed Upon Covariates (see DAG): Age, Gender, BMI, PF Ratio, Norepi Equivalents, LAPS2, OR Prior to Eligibility
-#Many Sites Have Zero Patients Who were Proned and Where In OR Prior to Enrollment; For Those Sites that Variable is Not Included in the Model
 
+
+#Many Sites Have Zero Patients Who were Proned and Were In OR Prior to Enrollment; For Those Sites that Variable is Not Included in the Model
 #Build an Indicator On Whether to Include OR Before Enrollment in Models or Not
+#Only Include if At Least 5 Patients Are Prone After OR
 no_or <- prone_analytic_df |>
   mutate(or_num = sum(or_before_enrollment, na.rm = TRUE)) |>
   filter(prone_12hour_outcome==1) |>
@@ -922,14 +929,15 @@ no_or <- prone_analytic_df |>
   select(or_num, prone_after_or) |>
   slice(1)
 
-no_or <- if (no_or$or_num<10 | no_or$prone_after_or<10) {
+no_or <- if (no_or$or_num<6 | no_or$prone_after_or<5) {
   1
 } else {
   0
 }
 
 #Full Model
-model_form_step <- prone_12hour_outcome ~ study_period + age_at_admission + female + bmi + factor(nee_pressor_dose) + sofa_score +  min_pf_ratio + or_before_enrollment + factor(hospital_id)
+model_form_step <- prone_12hour_outcome ~ study_period + age_scale + female + bmi_scale + factor(nee_pressor_dose) + sofa_score_scale +  
+  min_pf_ratio_scale + or_before_enrollment + factor(hospital_id)
 #Now Modified for Each Site
 if (n_hospitals > 1 & no_or == 0) {
   # Keep the formula as is
@@ -953,7 +961,8 @@ multivar_mod_summary <- model_summary_table(multivar_mod)
 
 #This is the Model Form for Evaluating the Step Changes AND Time Trends
 #Will Scale STudy Month So Coefficients Tell Us About Change in Log Odds Per 3 month Change
-model_form_step <- prone_12hour_outcome ~ study_period + study_period:month_scaled + age_at_admission + female + bmi + factor(nee_pressor_dose) +sofa_score+   min_pf_ratio + or_before_enrollment + factor(hospital_id) 
+model_form_step <- prone_12hour_outcome ~ study_period + study_period:month_scaled + age_scale + female + bmi_scale + factor(nee_pressor_dose) + sofa_score_scale + min_pf_ratio_scale + or_before_enrollment + factor(hospital_id)
+
 if (n_hospitals > 1 & no_or == 0) {
   # Keep the formula as is
   model_form_step <- model_form_step
@@ -1010,8 +1019,8 @@ summary(two_period_unvar)
 two_period_unvar_sum <- model_summary_table(two_period_unvar)
 
 #Full Model
-model_form_step <- prone_12hour_outcome ~ covid_period + covid_period:month_scaled + age_at_admission + female +
-  bmi + or_before_enrollment + factor(nee_pressor_dose) + sofa_score+  min_pf_ratio + factor(hospital_id)
+model_form_step <- prone_12hour_outcome ~ covid_period + covid_period:month_scaled + age_scale + female +
+  bmi_scale + or_before_enrollment + factor(nee_pressor_dose) + sofa_score_scale +  min_pf_ratio_scale + factor(hospital_id)
 
 if (n_hospitals > 1 & no_or == 0) {
   # Keep the formula as is
@@ -1053,7 +1062,7 @@ summary(two_period_unvar)
 two_period_unvar_sum <- model_summary_table(two_period_unvar)
 
 #Full Model IF No Pre_COVID Data
-model_form_step <- prone_12hour_outcome ~ month_scaled + age_at_admission + female + bmi + factor(nee_pressor_dose) + sofa_score+   min_pf_ratio + or_before_enrollment + factor(hospital_id)
+model_form_step <- prone_12hour_outcome ~ month_scaled + age_scale + female + bmi_scale + factor(nee_pressor_dose) + sofa_score_scale + min_pf_ratio_scale + or_before_enrollment + factor(hospital_id)
 #Now Multivariable
 if (n_hospitals > 1 & no_or == 0) {
   # Keep the formula as is
@@ -1140,7 +1149,7 @@ write.csv(unvar24_ame, paste0(project_location, '/project_output/', site, '_unad
 ```
 
 ```{r Adjusted Segmented Regression - Proning within 24h}
-model_form_step <- prone_24hour_outcome ~ study_period + age_at_admission + female + bmi + factor(nee_pressor_dose) + sofa_score+ min_pf_ratio + or_before_enrollment + factor(hospital_id)
+model_form_step <- prone_24hour_outcome ~ study_period + age_scale + female + bmi_scale + factor(nee_pressor_dose) + sofa_score_scale + min_pf_ratio_scale + or_before_enrollment + factor(hospital_id)
 
 if (n_hospitals > 1 & no_or == 0) {
   # Keep the formula as is
@@ -1164,7 +1173,7 @@ multivar_mod_summary <- model_summary_table(multivar_mod)
 
 #This is the Model Form for Evaluating the Step Changes AND Time Trends
 #Will Scale STudy Month So Coefficients Tell Us About Change in Log Odds Per 3 month Change
-model_form_step <- prone_24hour_outcome ~ study_period + study_period:month_scaled + age_at_admission + female + bmi + factor(nee_pressor_dose) +sofa_score+  or_before_enrollment + min_pf_ratio + factor(hospital_id)
+model_form_step <- prone_24hour_outcome ~ study_period + study_period:month_scaled + age_scale + female + bmi_scale + factor(nee_pressor_dose) + sofa_score_scale + or_before_enrollment + min_pf_ratio_scale + factor(hospital_id)
 
 if (n_hospitals > 1 & no_or == 0) {
   # Keep the formula as is
@@ -1197,6 +1206,7 @@ multivar24_ame <- ame_summary(model_list)
 write.csv(multivar24_ame, paste0(project_location, '/project_output/', site, '_adjusted_models_24_ame.csv'))
 ```
 
+
 ```{r Post HOC Analysis Analyzing Just Step Change at Transition to COVID Period With Rate of Change Prior and After - 24h proning}
 #For Sites with PRE-COVID Data They Will A STep Change From Pre-COVID to COVID and then analyze effect of time (in 3 month interval before and after this step change)
 #For Sites without Pre-COVID Data There is No Period Change and the Interest is in the Rate of Proning Decline Over the Study Period
@@ -1222,7 +1232,7 @@ summary(two_period_unvar)
 two_period_unvar_sum <- model_summary_table(two_period_unvar)
 
 
-model_form_step <- prone_24hour_outcome ~ covid_period + covid_period:month_scaled + age_at_admission + female + bmi + factor(nee_pressor_dose) + sofa_score+  min_pf_ratio + or_before_enrollment + factor(hospital_id)
+model_form_step <- prone_24hour_outcome ~ covid_period + covid_period:month_scaled + age_scale + female + bmi_scale + factor(nee_pressor_dose) + sofa_score_scale +  min_pf_ratio_scale + or_before_enrollment + factor(hospital_id)
 
 if (n_hospitals > 1 & no_or == 0) {
   # Keep the formula as is
@@ -1263,7 +1273,7 @@ two_period_unvar <- glm(model_form_step,
 summary(two_period_unvar)
 two_period_unvar_sum <- model_summary_table(two_period_unvar)
 
-model_form_step <- prone_24hour_outcome ~ month_scaled + age_at_admission + female + bmi + factor(nee_pressor_dose) + sofa_score+  min_pf_ratio + or_before_enrollment + factor(hospital_id)
+model_form_step <- prone_24hour_outcome ~ month_scaled + age_scale + female + bmi_scale + factor(nee_pressor_dose) + sofa_score_scale +  min_pf_ratio_scale + or_before_enrollment + factor(hospital_id)
 #Now Multivariable
 if (n_hospitals > 1 & no_or == 0) {
   # Keep the formula as is
@@ -1353,7 +1363,7 @@ write.csv(unvar72_ame, paste0(project_location, '/project_output/', site, '_unad
 
 ```{r Adjusted Segmented Regression - Proning within 72 hours}
 #Full Model
-model_form_step <- prone_72hour_outcome ~ study_period + age_at_admission + female + bmi + factor(nee_pressor_dose) + sofa_score+ min_pf_ratio + or_before_enrollment + factor(hospital_id)
+model_form_step <- prone_72hour_outcome ~ study_period + age_scale + female + bmi + factor(nee_pressor_dose) + sofa_score_scale + min_pf_ratio_scale + or_before_enrollment + factor(hospital_id)
 
 if (n_hospitals > 1 & no_or == 0) {
   # Keep the formula as is
@@ -1377,7 +1387,7 @@ multivar_mod_summary <- model_summary_table(multivar_mod)
 
 #This is the Model Form for Evaluating the Step Changes AND Time Trends
 #Will Scale STudy Month So Coefficients Tell Us About Change in Log Odds Per 3 month Change
-model_form_step <- prone_72hour_outcome ~ study_period + study_period:month_scaled + age_at_admission + female + bmi + factor(nee_pressor_dose) + sofa_score+  min_pf_ratio + or_before_enrollment + factor(hospital_id) 
+model_form_step <- prone_72hour_outcome ~ study_period + study_period:month_scaled + age_scale + female + bmi_scale + factor(nee_pressor_dose) + sofa_score_scale +  min_pf_ratio_scale + or_before_enrollment + factor(hospital_id) 
 
 if (n_hospitals > 1 & no_or == 0) {
   # Keep the formula as is
@@ -1435,7 +1445,7 @@ two_period_unvar <- glm(model_form_step,
 summary(two_period_unvar)
 two_period_unvar_sum <- model_summary_table(two_period_unvar)
 
-model_form_step <- prone_72hour_outcome ~ covid_period + covid_period:month_scaled + age_at_admission + female + bmi + factor(nee_pressor_dose) + sofa_score+ min_pf_ratio + or_before_enrollment + factor(hospital_id)
+model_form_step <- prone_72hour_outcome ~ covid_period + covid_period:month_scaled + age_scale + female + bmi_scale + factor(nee_pressor_dose) + sofa_score_scale + min_pf_ratio_scale + or_before_enrollment + factor(hospital_id)
 
 if (n_hospitals > 1 & no_or == 0) {
   # Keep the formula as is
@@ -1477,7 +1487,7 @@ summary(two_period_unvar)
 two_period_unvar_sum <- model_summary_table(two_period_unvar)
 
 #Now Multivariable
-model_form_step <- prone_72hour_outcome ~ month_scaled + age_at_admission + female + bmi + factor(nee_pressor_dose) + sofa_score+ min_pf_ratio + or_before_enrollment + factor(hospital_id)
+model_form_step <- prone_72hour_outcome ~ month_scaled + age_scale + female + bmi_scale + factor(nee_pressor_dose) + sofa_score_scale + min_pf_ratio_scale + or_before_enrollment + factor(hospital_id)
 
 if (n_hospitals > 1 & no_or == 0) {
   # Keep the formula as is
@@ -1564,7 +1574,7 @@ write.csv(unvar_anyprone_ame, paste0(project_location, '/project_output/', site,
 ```
 
 ```{r Adjusted Segmented Regression - All Proning}
-model_form_step <- proned ~ study_period + age_at_admission + female + bmi + factor(nee_pressor_dose) + sofa_score+ min_pf_ratio + or_before_enrollment + factor(hospital_id)
+model_form_step <- proned ~ study_period + age_scale + female + bmi_scale + factor(nee_pressor_dose) + sofa_score_scale + min_pf_ratio_scale + or_before_enrollment + factor(hospital_id)
 
 if (n_hospitals > 1 & no_or == 0) {
   # Keep the formula as is
@@ -1588,7 +1598,7 @@ multivar_mod_summary <- model_summary_table(multivar_mod)
 
 #This is the Model Form for Evaluating the Step Changes AND Time Trends
 #Will Scale STudy Month So Coefficients Tell Us About Change in Log Odds Per 3 month Change
-model_form_step <- proned ~ study_period + study_period:month_scaled + age_at_admission + female + bmi + factor(nee_pressor_dose) + sofa_score+ min_pf_ratio + or_before_enrollment + factor(hospital_id)
+model_form_step <- proned ~ study_period + study_period:month_scaled + age_scale + female + bmi_scale + factor(nee_pressor_dose) + sofa_score_scale + min_pf_ratio_scale + or_before_enrollment + factor(hospital_id)
 
 if (n_hospitals > 1 & no_or == 0) {
   # Keep the formula as is
@@ -1646,7 +1656,7 @@ summary(two_period_unvar)
 two_period_unvar_sum <- model_summary_table(two_period_unvar)
 
 
-model_form_step <- proned ~ covid_period + covid_period:month_scaled + age_at_admission + female + bmi + factor(nee_pressor_dose) + sofa_score+ min_pf_ratio + or_before_enrollment + factor(hospital_id)
+model_form_step <- proned ~ covid_period + covid_period:month_scaled + age_scale + female + bmi_scale + factor(nee_pressor_dose) + sofa_score_scale + min_pf_ratio_scale + or_before_enrollment + factor(hospital_id)
 
 if (n_hospitals > 1 & no_or == 0) {
   # Keep the formula as is
@@ -1688,7 +1698,7 @@ summary(two_period_unvar)
 two_period_unvar_sum <- model_summary_table(two_period_unvar)
 
 #Now Multivariable
-model_form_step <- proned ~ month_scaled + age_at_admission + female + bmi + factor(nee_pressor_dose) + sofa_score+ min_pf_ratio + or_before_enrollment + factor(hospital_id)
+model_form_step <- proned ~ month_scaled + age_scale + female + bmi_scale + factor(nee_pressor_dose) + sofa_score+ min_pf_ratio_scale + or_before_enrollment + factor(hospital_id)
 if (n_hospitals > 1 & no_or == 0) {
   # Keep the formula as is
   model_form_step <- model_form_step
@@ -1725,8 +1735,8 @@ write.csv(two_period_allprone_ame, paste0(project_location, '/project_output/', 
 ```{r Last Piece Create a Table with Observed and Expeted Proning Counts/Rates by Period and Hospital}
 #This Aggregate Data Will be Used for Risk and Reliability Adjusted Proning Rate Estimates by Hospital and Period
 #Generate Prone Propensity Score (Don't Account for Hospital or Study Period Here)
-alt_form <- prone_12hour_outcome ~ age_at_admission  + female +
-  bmi + factor(nee_pressor_dose) +sofa_score+ or_before_enrollment + min_pf_ratio
+alt_form <- prone_12hour_outcome ~ age_scale  + female +
+  bmi + factor(nee_pressor_dose) +sofa_score_scale+ or_before_enrollment + min_pf_ratio_scale
 
 #Adjust if No OR Before Enrollment
 if (no_or == 0) {

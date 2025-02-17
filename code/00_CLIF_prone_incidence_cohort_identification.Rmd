@@ -8,9 +8,9 @@ output: html_document
 #Specify File Paths, Project Path and Site - SITE SPECIFIC
 #Load the Required CLIF Tables (or if using ARROW/parquet refer to table in situ on storage drive)
 ```{r}
-tables_location <- 'Z:/barker/clif_temp'
-project_location <- 'Z:/barker/clif_temp/Proning_Project'
-site <- "Michigan"
+tables_location <- '~/workspace/Storage/chochbe1/JH_CCRD/CLIF/rclif'
+project_location <- '~/workspace/Storage/chochbe1/JH_CCRD/CLIF/CLIF_Projects/CLIF_prone_incidence'
+site <- "Hopkins"
 file_type <- "parquet"
 
 
@@ -1224,9 +1224,9 @@ sofa_pressors <- pressor_data |>
   select(patient_id, encounter_block, max_sofa_pressor) |> #, norepi_dose, epi_dose, vaso_dose, angiotensin_dose, dopa_dose, phenyl_dose) |>
   ungroup()
 
-#Now Select Max NEE In this 12 Hour Period 
-  norepi_equivalent <- pressor_data |>
-  filter(as.POSIXct(admin_dttm)>=as.POSIXct(t_enrollment)-dhours(12) & 
+#Now Select Max NEE In this 24 Hour Period 
+norepi_equivalent <- pressor_data |>
+  filter(as.POSIXct(admin_dttm)>=as.POSIXct(t_enrollment)-dhours(24) & 
            as.POSIXct(admin_dttm)<=as.POSIXct(t_enrollment)) |>
   group_by(patient_id, encounter_block) |>
   mutate(max_norepi_equivalent=max(norepi_equivalent, na.rm = TRUE)) |>
@@ -1381,8 +1381,8 @@ prone_analytic_data <- hospitalization_vars |>
       tolower(ethnicity_category) %in% c('non-hispanic'), 'Black, non-Hispanic',
     tolower(race_category)=='asian', 'Asian',
     tolower(race_category) %!in% c('white', 'black or african american', 'asian', 'unknown'), 'other',
-    (tolower(race_category)=='unknown'| is.na(race_category)), 'unknown')) |>
-  mutate(race_ethnicity) |>
+    tolower(race_category) == "unknown" | is.na(race_category) |
+    tolower(ethnicity_category) == "unknown" | is.na(ethnicity_category), "unknown")) |>
   select(-mode_category, -device_category) |>
   #Calculate Time from Admission to Enrollment
   mutate(days_admit_to_enroll=as.duration(t_enrollment-final_admission_dttm)/ddays(1)) |>
@@ -1396,8 +1396,6 @@ or_table<-table(prone_analytic_data$prone_12hour_outcome, prone_analytic_data$or
 write.csv(or_table, file=paste0(project_location, '/project_output/', site, '_OR_proning.csv'))
 
 write_parquet(prone_analytic_data, paste0(project_location, '/project_tables/prone_analytic_data.parquet'))
-
-
 ```
 
 
