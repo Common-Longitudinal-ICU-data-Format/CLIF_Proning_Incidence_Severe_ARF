@@ -8,9 +8,9 @@ output: html_document
 #Specify File Paths, Project Path and Site - SITE SPECIFIC
 #Load the Required CLIF Tables (or if using ARROW/parquet refer to table in situ on storage drive)
 ```{r}
-tables_location <- '~/workspace/Storage/chochbe1/JH_CCRD/CLIF/rclif'
-project_location <- '~/workspace/Storage/chochbe1/JH_CCRD/CLIF/CLIF_Projects/CLIF_prone_incidence'
-site <- "Hopkins"
+tables_location <- 'Z:/barker/clif_temp'
+project_location <- 'Z:/barker/clif_temp/Proning_Project'
+site <- "Michigan"
 file_type <- "parquet"
 
 
@@ -1136,6 +1136,7 @@ pressor_data <- clif_medication_admin_continuous |>
   filter(as.POSIXct(admin_dttm)>=as.POSIXct(t_enrollment)-dhours(24) & 
            as.POSIXct(admin_dttm)<=as.POSIXct(t_enrollment)) |>
   #Define if a Pressor Needs Weight Based Dosing
+  mutate(med_dose_unit=tolower(med_dose_unit)) |>
   mutate(needs_wt_based=fifelse((med_dose_unit=="mcg/min" | med_dose_unit=="mg/min" | med_dose_unit=="ng/min"), 1, 0)) |>
   #Filter if Epinephrine is Given in 'mg' as this is code dosing
   filter(!(med_category=='epinephrine' & med_dose_unit=='mg')) |>
@@ -1212,7 +1213,7 @@ pressor_data <- clif_medication_admin_continuous |>
   #See Kotani et al for Norepi dose equivalents for Epi, Phenyl, Vaso, Dopa, Angiotensin)
   mutate(pressor_on=(norepi_on + epi_on + phenyl_on + vaso_on + dopa_on + angiotensin_on)) |> 
   mutate(norepi_equivalent=norepi_dose + epi_dose+ vaso_dose*2.5+ angiotensin_dose*0.0025+ dopa_dose/100+ phenyl_dose*0.06) |>
-  mutate(sofa_pressor=case_when((dopa_dose>0 & dopa_dose<=5) | dobut_dose>0~2, dopa_dose>5 | (epi_dose>0 & epi_dose <=0.1) | (norepi_dose>0 & norepi_dose<=0.1) ~3, dopa_dose>15 | epi_dose>0.1 | norepi_dose>0.1 ~4, pressor_on==0~0)) |>
+  mutate(sofa_pressor=case_when(dopa_dose>15 | epi_dose>0.1 | norepi_dose>0.1 ~4, dopa_dose>5 | (epi_dose>0 & epi_dose <=0.1) | (norepi_dose>0 & norepi_dose<=0.1) ~3, (dopa_dose>0 & dopa_dose<=5) | dobut_dose>0~2 , pressor_on==0~0)) |>
   mutate(sofa_pressor=case_when(is.na(sofa_pressor)~0, is.na(sofa_pressor)==F~sofa_pressor)) |>
   collect()
 
@@ -1395,12 +1396,24 @@ rm(bmi, demos, hospitalization_vars, hospital_location, min_pf, norepi_equivalen
 or_table<-table(prone_analytic_data$prone_12hour_outcome, prone_analytic_data$or_before_enrollment, useNA = "always")
 write.csv(or_table, file=paste0(project_location, '/project_output/', site, '_OR_proning.csv'))
 
+#exclude patients who go to the OR prior to study enrollment from cohort
+prone_analytic_data<- prone_analytic_data %>% filter(or_before_enrollment!=1)
+
 write_parquet(prone_analytic_data, paste0(project_location, '/project_tables/prone_analytic_data.parquet'))
 ```
 
 
 ```{r}
 ## Export the list of `hospitalization_id` for the identified patients
+non_or<- prone_analytic_data |>
+  select(patient_id, encounter_block) |>
+  mutate(keep=1)
+
+cohort_hospitalization_ids <- cohort_hospitalization_ids |>
+  left_join(non_or) |>
+  filter(keep==1) |>
+  select(-keep)
+  
 save(cohort_hospitalization_ids, file = paste0(project_location, "/project_tables/cohort_hospitalization_ids.RData"))
 ```
 
