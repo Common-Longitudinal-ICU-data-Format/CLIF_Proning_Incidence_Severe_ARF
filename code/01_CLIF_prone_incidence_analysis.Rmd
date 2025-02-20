@@ -1012,7 +1012,7 @@ two_period_multivar_sum <- model_summary_table(two_period_multivar_mod)
 two_period_table <- rowbind(two_period_unvar_sum, data.frame('site'=c('','Adjusted Model')), fill = TRUE) |>
                rbind(two_period_multivar_sum)
 # Write the table to a CSV file
-write.csv(two_period_table, paste0(project_location, '/project_output/', site, 'two_period_models.csv'))
+write.csv(two_period_table, paste0(project_location, '/project_output/', site, '_two_period_models.csv'))
 
 
 } else { 
@@ -1048,7 +1048,7 @@ two_period_multivar_sum <- model_summary_table(two_period_multivar_mod)
 two_period_table <- rowbind(two_period_unvar_sum, data.frame('site'=c('','Adjusted Model')), fill = TRUE) |>
                rbind(two_period_multivar_sum)
 # Write the table to a CSV file
-write.csv(two_period_table, paste0(project_location, '/project_output/', site, 'two_period_models.csv'))
+write.csv(two_period_table, paste0(project_location, '/project_output/', site, '_two_period_models.csv'))
 }
 
 #Output a Table of Average Marginal Effects Using the AME Function Created Above
@@ -1200,7 +1200,7 @@ two_period_multivar_sum <- model_summary_table(two_period_multivar_mod)
 two_period_table <- rowbind(two_period_unvar_sum, data.frame('site'=c('','Adjusted Model')), fill = TRUE) |>
                rbind(two_period_multivar_sum)
 # Write the table to a CSV file
-write.csv(two_period_table, paste0(project_location, '/project_output/', site, 'two_period_models_24.csv'))
+write.csv(two_period_table, paste0(project_location, '/project_output/', site, '_two_period_models_24.csv'))
 
 
 } else { 
@@ -1235,7 +1235,7 @@ two_period_multivar_sum <- model_summary_table(two_period_multivar_mod)
 two_period_table <- rowbind(two_period_unvar_sum, data.frame('site'=c('','Adjusted Model')), fill = TRUE) |>
                rbind(two_period_multivar_sum)
 # Write the table to a CSV file
-write.csv(two_period_table, paste0(project_location, '/project_output/', site, 'two_period_models_24.csv'))
+write.csv(two_period_table, paste0(project_location, '/project_output/', site, '_two_period_models_24.csv'))
   }
 
 #Output a Table of Average Marginal Effects Using the AME Function Created Above
@@ -1389,7 +1389,7 @@ two_period_multivar_sum <- model_summary_table(two_period_multivar_mod)
 two_period_table <- rowbind(two_period_unvar_sum, data.frame('site'=c('','Adjusted Model')), fill = TRUE) |>
                rbind(two_period_multivar_sum)
 # Write the table to a CSV file
-write.csv(two_period_table, paste0(project_location, '/project_output/', site, 'two_period_models_72.csv'))
+write.csv(two_period_table, paste0(project_location, '/project_output/', site, '_two_period_models_72.csv'))
 
 
 } else { 
@@ -1425,7 +1425,7 @@ two_period_multivar_sum <- model_summary_table(two_period_multivar_mod)
 two_period_table <- rowbind(two_period_unvar_sum, data.frame('site'=c('','Adjusted Model')), fill = TRUE) |>
                rbind(two_period_multivar_sum)
 # Write the table to a CSV file
-write.csv(two_period_table, paste0(project_location, '/project_output/', site, 'two_period_models_72.csv'))
+write.csv(two_period_table, paste0(project_location, '/project_output/', site, '_two_period_models_72.csv'))
   }
 
 #Output a Table of Average Marginal Effects Using the AME Function Created Above
@@ -1576,7 +1576,7 @@ two_period_multivar_sum <- model_summary_table(two_period_multivar_mod)
 two_period_table <- rowbind(two_period_unvar_sum, data.frame('site'=c('','Adjusted Model')), fill = TRUE) |>
                rbind(two_period_multivar_sum)
 # Write the table to a CSV file
-write.csv(two_period_table, paste0(project_location, '/project_output/', site, 'two_period_models_alltime.csv'))
+write.csv(two_period_table, paste0(project_location, '/project_output/', site, '_two_period_models_alltime.csv'))
 
 
 } else { 
@@ -1611,7 +1611,7 @@ two_period_multivar_sum <- model_summary_table(two_period_multivar_mod)
 two_period_table <- rowbind(two_period_unvar_sum, data.frame('site'=c('','Adjusted Model')), fill = TRUE) |>
                rbind(two_period_multivar_sum)
 # Write the table to a CSV file
-write.csv(two_period_table, paste0(project_location, '/project_output/', site, 'two_period_models_alltime.csv'))
+write.csv(two_period_table, paste0(project_location, '/project_output/', site, '_two_period_models_alltime.csv'))
 }
 
 #Output a Table of Average Marginal Effects Using the AME Function Created Above
