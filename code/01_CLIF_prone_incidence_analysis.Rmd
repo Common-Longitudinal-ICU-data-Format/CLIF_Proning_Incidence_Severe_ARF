@@ -304,8 +304,7 @@ factors_tab <- c(
   'nee_pressor_dose',
   'severe_ards',
   'eligible_by_proseva',
-  'eligible_by_prone',
- 'nee_pressor_dose'
+  'eligible_by_prone'
 )
 
 #First Create Table with Ranges and Additional Statistics Including Numbers of Missing and Min/Max
