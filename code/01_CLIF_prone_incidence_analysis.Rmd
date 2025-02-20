@@ -733,13 +733,13 @@ factors_tab <- c(
 #First Create Table with Ranges and Additional Statistics Including Numbers of Missing and Min/Max
 tab2 <- CreateTableOne(vars = to_tab, data=prone_analytic_df, factorVars = factors_tab)
 summary(tab2) #This will be in HTML File
-sink(paste0(project_location, '/project_output/', site, '_table2_missing_ranges.doc'))
+#sink(paste0(project_location, '/project_output/', site, '_table2_missing_ranges.doc'))
 #Repeat to Create Word File
-summary(tab2)
+#summary(tab2)
 # Stop saving output to the file
-sink() 
+#sink() 
 
-#Now Create a Traditional Table 1, One Stratified by Period and One Stratified by Hospital
+#Now Create Table 2, One Stratified by Period and One Stratified by Hospital
 tab2 <- CreateTableOne(vars = to_tab, strata="study_period", data=prone_analytic_df, factorVars = factors_tab, addOverall = TRUE) 
 print(tab2)
 tab2_excel <- as.data.frame(print(tab2, printToggle = FALSE, missing = TRUE)) |>
@@ -751,7 +751,7 @@ tab2_excel <- as.data.frame(print(tab2, printToggle = FALSE, missing = TRUE)) |>
 write.csv(tab2_excel, file=paste0(project_location, '/project_output/', site, '_Table_Prone_Outcomes_Period.csv'))
 rm(tab2_excel)
 
-#Now Create a Traditional Table 1, One Stratified by Period and One Stratified by Hospital
+#Now Create a Table 2, Stratified by Hospital
 if (n_hospitals>1) {
 tab2 <- CreateTableOne(vars = to_tab, strata="hospital_id", data=prone_analytic_df, factorVars = factors_tab, addOverall = TRUE) 
 print(tab2)
@@ -770,7 +770,7 @@ tab2_excel <- as.data.frame(print(tab2, printToggle = FALSE, missing = TRUE)) |>
   rownames_to_column('characteristic') |>
   rename(percent_missing = Missing) 
 }
-write.csv(tab2_excel, file=paste0(project_location, '/project_output/', site, '_Table_Prone_Outcomes_Period.csv'))
+write.csv(tab2_excel, file=paste0(project_location, '/project_output/', site, '_Table_Prone_Outcomes_by_Hospital.csv'))
 rm(tab2_excel)
 ```
 
