@@ -8,9 +8,9 @@ output: html_document
 #Specify File Paths, Project Path and Site - SITE SPECIFIC
 #Load the Analytic File
 ```{r}
-tables_location <- 'Z:/barker/clif_temp'
-project_location <- 'Z:/barker/clif_temp/Proning_Project'
-site <- "Michigan"
+tables_location <- '~/workspace/Storage/chochbe1/JH_CCRD/CLIF/rclif'
+project_location <- '~/workspace/Storage/chochbe1/JH_CCRD/CLIF/CLIF_Projects/CLIF_prone_incidence'
+site <- "Hopkins"
 file_type <- "parquet"
 ```
 
@@ -288,7 +288,8 @@ to_tab <- c(
   'first_proseva_mode',
   'first_proseva_peep',
   'first_proseva_fio2',
-  'sofa_score'
+  'sofa_score',
+  'nee_pressor_dose'
 )
 
 #Factor Variables
@@ -303,7 +304,7 @@ factors_tab <- c(
   'nee_pressor_dose',
   'severe_ards',
   'eligible_by_proseva',
-  'eligible_by_prone' 
+  'eligible_by_prone'
 )
 
 #First Create Table with Ranges and Additional Statistics Including Numbers of Missing and Min/Max
@@ -731,13 +732,13 @@ factors_tab <- c(
 #First Create Table with Ranges and Additional Statistics Including Numbers of Missing and Min/Max
 tab2 <- CreateTableOne(vars = to_tab, data=prone_analytic_df, factorVars = factors_tab)
 summary(tab2) #This will be in HTML File
-sink(paste0(project_location, '/project_output/', site, '_table2_missing_ranges.doc'))
+#sink(paste0(project_location, '/project_output/', site, '_table2_missing_ranges.doc'))
 #Repeat to Create Word File
-summary(tab2)
+#summary(tab2)
 # Stop saving output to the file
-sink() 
+#sink() 
 
-#Now Create a Traditional Table 1, One Stratified by Period and One Stratified by Hospital
+#Now Create Table 2, One Stratified by Period and One Stratified by Hospital
 tab2 <- CreateTableOne(vars = to_tab, strata="study_period", data=prone_analytic_df, factorVars = factors_tab, addOverall = TRUE) 
 print(tab2)
 tab2_excel <- as.data.frame(print(tab2, printToggle = FALSE, missing = TRUE)) |>
@@ -749,7 +750,7 @@ tab2_excel <- as.data.frame(print(tab2, printToggle = FALSE, missing = TRUE)) |>
 write.csv(tab2_excel, file=paste0(project_location, '/project_output/', site, '_Table_Prone_Outcomes_Period.csv'))
 rm(tab2_excel)
 
-#Now Create a Traditional Table 1, One Stratified by Period and One Stratified by Hospital
+#Now Create a Table 2, Stratified by Hospital
 if (n_hospitals>1) {
 tab2 <- CreateTableOne(vars = to_tab, strata="hospital_id", data=prone_analytic_df, factorVars = factors_tab, addOverall = TRUE) 
 print(tab2)
@@ -768,7 +769,7 @@ tab2_excel <- as.data.frame(print(tab2, printToggle = FALSE, missing = TRUE)) |>
   rownames_to_column('characteristic') |>
   rename(percent_missing = Missing) 
 }
-write.csv(tab2_excel, file=paste0(project_location, '/project_output/', site, '_Table_Prone_Outcomes_Period.csv'))
+write.csv(tab2_excel, file=paste0(project_location, '/project_output/', site, '_Table_Prone_Outcomes_by_Hospital.csv'))
 rm(tab2_excel)
 ```
 
@@ -824,9 +825,19 @@ ame_summary <- function(model_list) {
       mutate(across(c("estimate", "conf.low", "conf.high"), \(x) round(x, 4)))
     
     # Check if the model formula contains ':month_scaled' (interaction term)
-    if (grepl(":month_scaled", formula_string, ignore.case = TRUE)) {
+    # Need to Also Check if this a Two Period Model (will have 'covid_period' in it)
+    if (grepl("study_period:month_scaled", formula_string, ignore.case = TRUE)) {
       # Additional avg_slopes computation for interaction terms
       additional_slopes <- tidy(avg_slopes(model_list[[i]], variables = "month_scaled", by = "study_period")) %>%
+        mutate(model = paste0("Model ", i, " - Interaction Terms")) %>%
+        mutate(across(c("estimate", "conf.low", "conf.high"), \(x) round(x, 4)))
+      
+      # Combine the main slopes with additional slopes
+      slopes <- bind_rows(slopes, additional_slopes)
+    } else if (grepl("covid_period:month_scaled", formula_string, ignore.case = TRUE)) {
+      
+      # Additional avg_slopes computation for interaction terms
+      additional_slopes <- tidy(avg_slopes(model_list[[i]], variables = "month_scaled", by = "covid_period")) %>%
         mutate(model = paste0("Model ", i, " - Interaction Terms")) %>%
         mutate(across(c("estimate", "conf.low", "conf.high"), \(x) round(x, 4)))
       
@@ -1010,7 +1021,7 @@ two_period_multivar_sum <- model_summary_table(two_period_multivar_mod)
 two_period_table <- rowbind(two_period_unvar_sum, data.frame('site'=c('','Adjusted Model')), fill = TRUE) |>
                rbind(two_period_multivar_sum)
 # Write the table to a CSV file
-write.csv(two_period_table, paste0(project_location, '/project_output/', site, 'two_period_models.csv'))
+write.csv(two_period_table, paste0(project_location, '/project_output/', site, '_two_period_models.csv'))
 
 
 } else { 
@@ -1046,7 +1057,7 @@ two_period_multivar_sum <- model_summary_table(two_period_multivar_mod)
 two_period_table <- rowbind(two_period_unvar_sum, data.frame('site'=c('','Adjusted Model')), fill = TRUE) |>
                rbind(two_period_multivar_sum)
 # Write the table to a CSV file
-write.csv(two_period_table, paste0(project_location, '/project_output/', site, 'two_period_models.csv'))
+write.csv(two_period_table, paste0(project_location, '/project_output/', site, '_two_period_models.csv'))
 }
 
 #Output a Table of Average Marginal Effects Using the AME Function Created Above
@@ -1198,7 +1209,7 @@ two_period_multivar_sum <- model_summary_table(two_period_multivar_mod)
 two_period_table <- rowbind(two_period_unvar_sum, data.frame('site'=c('','Adjusted Model')), fill = TRUE) |>
                rbind(two_period_multivar_sum)
 # Write the table to a CSV file
-write.csv(two_period_table, paste0(project_location, '/project_output/', site, 'two_period_models_24.csv'))
+write.csv(two_period_table, paste0(project_location, '/project_output/', site, '_two_period_models_24.csv'))
 
 
 } else { 
@@ -1233,7 +1244,7 @@ two_period_multivar_sum <- model_summary_table(two_period_multivar_mod)
 two_period_table <- rowbind(two_period_unvar_sum, data.frame('site'=c('','Adjusted Model')), fill = TRUE) |>
                rbind(two_period_multivar_sum)
 # Write the table to a CSV file
-write.csv(two_period_table, paste0(project_location, '/project_output/', site, 'two_period_models_24.csv'))
+write.csv(two_period_table, paste0(project_location, '/project_output/', site, '_two_period_models_24.csv'))
   }
 
 #Output a Table of Average Marginal Effects Using the AME Function Created Above
@@ -1387,7 +1398,7 @@ two_period_multivar_sum <- model_summary_table(two_period_multivar_mod)
 two_period_table <- rowbind(two_period_unvar_sum, data.frame('site'=c('','Adjusted Model')), fill = TRUE) |>
                rbind(two_period_multivar_sum)
 # Write the table to a CSV file
-write.csv(two_period_table, paste0(project_location, '/project_output/', site, 'two_period_models_72.csv'))
+write.csv(two_period_table, paste0(project_location, '/project_output/', site, '_two_period_models_72.csv'))
 
 
 } else { 
@@ -1423,7 +1434,7 @@ two_period_multivar_sum <- model_summary_table(two_period_multivar_mod)
 two_period_table <- rowbind(two_period_unvar_sum, data.frame('site'=c('','Adjusted Model')), fill = TRUE) |>
                rbind(two_period_multivar_sum)
 # Write the table to a CSV file
-write.csv(two_period_table, paste0(project_location, '/project_output/', site, 'two_period_models_72.csv'))
+write.csv(two_period_table, paste0(project_location, '/project_output/', site, '_two_period_models_72.csv'))
   }
 
 #Output a Table of Average Marginal Effects Using the AME Function Created Above
@@ -1574,7 +1585,7 @@ two_period_multivar_sum <- model_summary_table(two_period_multivar_mod)
 two_period_table <- rowbind(two_period_unvar_sum, data.frame('site'=c('','Adjusted Model')), fill = TRUE) |>
                rbind(two_period_multivar_sum)
 # Write the table to a CSV file
-write.csv(two_period_table, paste0(project_location, '/project_output/', site, 'two_period_models_alltime.csv'))
+write.csv(two_period_table, paste0(project_location, '/project_output/', site, '_two_period_models_alltime.csv'))
 
 
 } else { 
@@ -1609,7 +1620,7 @@ two_period_multivar_sum <- model_summary_table(two_period_multivar_mod)
 two_period_table <- rowbind(two_period_unvar_sum, data.frame('site'=c('','Adjusted Model')), fill = TRUE) |>
                rbind(two_period_multivar_sum)
 # Write the table to a CSV file
-write.csv(two_period_table, paste0(project_location, '/project_output/', site, 'two_period_models_alltime.csv'))
+write.csv(two_period_table, paste0(project_location, '/project_output/', site, '_two_period_models_alltime.csv'))
 }
 
 #Output a Table of Average Marginal Effects Using the AME Function Created Above
