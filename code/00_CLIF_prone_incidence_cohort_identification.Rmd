@@ -383,8 +383,15 @@ device_transitions <- vent |>
   ungroup()
 
 #Define Ventilator Episodes - Define Ventilator Liberation as 24 Hours Breathing Off Ventilator, Otherwise Will Include That Time in Ventilator Duration
+#For Patients Who Start IMV on Last Row can Calculate Time on Vent Using Final Discharge Time
+dc_time <- clif_hospitalization |>
+  select(patient_id, encounter_block, final_discharge_dttm) |>
+  distinct()  |> #1 Row for 1 Encounter Block 
+  collect()
+
 #Temporarily Number Vent Episodes
 device_transitions <- device_transitions |>
+  join(dc_time, how = 'left') |>
   group_by(patient_id, encounter_block, device_category) |>
   mutate(category_number=row_number()) |>
   #If a Last Row of an Enconter Block is Not a Device Transition Set Category Number to NA
@@ -400,7 +407,9 @@ device_transitions <- device_transitions |>
   )) |>
   mutate(vent_stop=fcase(
     device_category=='IMV' & lead(prev_value_diff)==1, lead(recorded_dttm),
-    device_category=='IMV' & lead(row_number())==n(), lead(recorded_dttm) #This is Why we Kept Last Row
+    device_category=='IMV' & lead(row_number())==n(), lead(recorded_dttm), #This is Why we Kept Last Row
+    #If the Last Row is 'IMV' Than Use Discharge Time 
+    row_number()==n() & device_category=='IMV', final_discharge_dttm
   )) |>
   fill(vent_stop, .direction = 'down') |>
   #Define Vent Liberation of Prior Vent Episodes as 24 Hours without device_category=='IMV', can fill backwards for this
@@ -414,14 +423,7 @@ device_transitions <- device_transitions |>
   mutate(last_row=fifelse(row_number()==n(), 1, 0)) |>
   ungroup()
 
-#For Patients Who Start IMV on Last Row can Calculate Time on Vent Using Final Discharge Time
-dc_time <- clif_hospitalization |>
-  select(patient_id, encounter_block, final_discharge_dttm) |>
-  distinct()  |> #1 Row for 1 Encounter Block 
-  collect()
-
 device_transitions <- device_transitions |>
-  join(dc_time, how = 'left') |>
   #Alternative Way of Labelling Liberation
   group_by(patient_id, encounter_block) |>
   mutate(vent_stop=fifelse(
