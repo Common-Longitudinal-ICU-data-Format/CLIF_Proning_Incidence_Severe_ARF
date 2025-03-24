@@ -296,13 +296,16 @@ write_csv(prone_per_quarter, paste0(project_location, '/project_output/', site,'
 
 #Repeat Per Study Period and sars_cov2_status
 prone_per_quarter_sarscov2 <- prone_analytic_df |> 
-  group_by(period_sarscov2) |>
+  mutate(sars_cov2_positive=fcase(
+    sars_cov2_positive=='Positive', 'COVID', 
+    default = 'Not COVID'
+  )) |>
+  group_by(study_quarter, sars_cov2_positive) |>
   summarise(
     'site' = site,
     'n_hospitals' = n_hospitals,
-    'study_period' = max(period_sarscov2),
+    'study_period' = max(study_period),
     'n_patients' = n(),
-    'sars_cov2_positive' = sum(sars_cov2_positive=='Positive', na.rm=T),
     'n_proned_12_hr' = sum(prone_12hour_outcome),
     'proned_12_hr_percent' = mean(prone_12hour_outcome),
     'standard_error_12' = sqrt(mean(prone_12hour_outcome) * (1 - mean(prone_12hour_outcome)) / n()),
@@ -316,7 +319,7 @@ prone_per_quarter_sarscov2 <- prone_analytic_df |>
     'proned_percent_all' = mean(proned),
     'standard_error_all' = sqrt(mean(proned) * (1 - mean(proned)) / n())
       ) |>
-  relocate(site, n_hospitals, .before = period_sarscov2)
+  relocate(site, n_hospitals, .before = sars_cov2_positive)
 write_csv(prone_per_quarter_sarscov2, paste0(project_location, '/project_output/', site,'_prone_per_quarter-sarscoV2_status.csv'))
 
 #Create a Histogram of Admissions Per Study Month by Hospital
@@ -817,7 +820,63 @@ extended
 ggsave(paste0(site, '_proning_by_month_all.pdf'),
        path = paste0(project_location, '/project_output/graphs/'))
 
+##Finally Plot By SARS-COV2 and Period
+base_plot_covid <- ggplot(prone_per_quarter_sarscov2, aes(x = study_quarter, y = proned_12_hr_percent)) +
+  geom_errorbar(aes(ymin = proned_12_hr_percent - standard_error_12,
+                    ymax = proned_12_hr_percent + standard_error_12),
+                width = 0.1, alpha = 0.5, color = 'grey') +
+  geom_point(aes(color = sars_cov2_positive)) +
+  geom_line(aes(color = sars_cov2_positive, group = sars_cov2_positive)) +
+  scale_y_continuous(breaks=seq(0,1, by=0.1), 
+                     labels = scales::percent, 
+                     limits = c(0,1.0),
+                     name = 'Proned within 12 Hours of Enrollment') +
+  scale_x_continuous(breaks=seq(min_quarter, max_quarter, by=1),
+                     labels = study_quarter_labels,
+                     limits = c(min_quarter, max_quarter),
+                     name = 'Year: Months') +
+  labs(color = "Patient SARS-CoV2 Status") +
+  scale_color_discrete(labels = c("Positive", "Negative/Unknown or Pre-COVID")) +
+  theme_classic() + # theme_classic call
+  theme(
+    axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1),
+    legend.title = element_text(size = rel(0.50)),
+    legend.text  = element_text(size = rel(0.50)),
+    legend.key.size = unit(0.50, "lines")
+  )
+
+#Now Add Annotations and Verticle Lines to Plot Based on What Data a Site Has Contributed
+if (site_type == "Pre-COVID,COVID,Post-COVID") { # If Site Has Full Study Period (2018-2023)
+  extended <- base_plot_covid +
+    geom_vline(xintercept = 9, linetype = 2) +
+    annotate("text", x = 5.667, y = 0.95, 
+             label = 'Pre COVID-19\nPeriod', size = rel(1.5)) +
+    geom_vline(xintercept = 18, linetype = 2) +
+    annotate("text", x = 13.667, y = 0.95, 
+             label = 'COVID-19\nPeriod', size = rel(1.5)) +
+    annotate("text", x = 21, y = 0.95, 
+             label = 'Post COVID-19\nPeriod', size = rel(1.5))
+} else if (site_type == "COVID,Post-COVID") {
+  extended <- base_plot +
+    geom_vline(xintercept = 18, linetype = 2) +
+    annotate("text", x = 13, y = 0.95, label = 'COVID-19\nPeriod', size = rel(1.5)) +
+    annotate("text", x = 21, y = 0.95, label = 'Post COVID-19\nPeriod', size = rel(1.5))
+} else if (site_type == "Pre-COVID,COVID") {
+  extended <- base_plot +
+    geom_vline(xintercept = 9, linetype = 2) +
+    annotate("text", x = 5.667, y = 0.95, label = 'Pre COVID-19\nPeriod', size = rel(1.5)) +
+    annotate("text", x = 13.667, y = 0.95, label = 'COVID-19\nPeriod',size = rel(1.5))
+} else {
+  extended <- base_plot
+}
+# Display the extended plot
+extended
+ggsave(paste0(site, '_proning_by_quarter_12_bycovid.pdf'),
+       path = paste0(project_location, '/project_output/graphs/'))
+
 ```
+
+
 ```{r Proning and Patient Outcomes in Table Form}
 to_tab <- c(
   'prone_episodes',
