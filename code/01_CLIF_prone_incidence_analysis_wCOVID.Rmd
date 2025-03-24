@@ -187,7 +187,7 @@ prone_analytic_df <- prone_analytic_df |>
     study_period_cat==1 & sars_cov2_positive %in% c('Negative', 'Unknown'), 'COVID_SarsCov2Neg-Unk',
     study_period_cat==3 & sars_cov2_positive=='Positive','Post-COVID_SarsCov2Pos',
     study_period_cat==3 & sars_cov2_positive %in% c('Negative', 'Unknown'), 'Post-COVID_SarsCov2Neg-Unk'
-  ))
+  )) 
 ```
 
 
@@ -879,6 +879,10 @@ ggsave(paste0(site, '_proning_by_quarter_12_bycovid.pdf'),
 
 ```{r Proning and Patient Outcomes in Table Form}
 to_tab <- c(
+  'prone_12hour_outcome',
+  'prone_24hour_outcome',
+  'prone_72hour_outcome',
+  'proned',
   'prone_episodes',
   'first_prone_episode_hours',
   'median_pt_prone_duration',
@@ -907,7 +911,7 @@ summary(tab2) #This will be in HTML File
 # Stop saving output to the file
 #sink() 
 
-#Now Create Table 2, One Stratified by Period and One Stratified by Hospital
+#Now Create Table 2, One Stratified by Period One by Hospital and One by Period and COVID Status
 tab2 <- CreateTableOne(vars = to_tab, strata="study_period", data=prone_analytic_df, factorVars = factors_tab, addOverall = TRUE) 
 print(tab2)
 tab2_excel <- as.data.frame(print(tab2, printToggle = FALSE, missing = TRUE)) |>
@@ -917,6 +921,18 @@ tab2_excel <- as.data.frame(print(tab2, printToggle = FALSE, missing = TRUE)) |>
   rename(percent_missing = Missing) |>
   select(-test)
 write.csv(tab2_excel, file=paste0(project_location, '/project_output/', site, '_Table_Prone_Outcomes_Period.csv'))
+rm(tab2_excel)
+
+#Now Create a Table 2, Stratified by COVID period
+tab2 <- CreateTableOne(vars = to_tab, strata="period_sarscov2", data=prone_analytic_df, factorVars = factors_tab, addOverall = TRUE) 
+print(tab2)
+tab2_excel <- as.data.frame(print(tab2, printToggle = FALSE, missing = TRUE)) |>
+  mutate(site = site) |>
+  relocate(site, .before = Overall) |>
+  rownames_to_column('characteristic') |>
+  rename(percent_missing = Missing) |>
+  select(-test)
+write.csv(tab2_excel, file=paste0(project_location, '/project_output/', site, '_Table_Prone_Outcomes_by_Period_Sars-Cov2_Status.csv'))
 rm(tab2_excel)
 
 #Now Create a Table 2, Stratified by Hospital
@@ -940,6 +956,8 @@ tab2_excel <- as.data.frame(print(tab2, printToggle = FALSE, missing = TRUE)) |>
 }
 write.csv(tab2_excel, file=paste0(project_location, '/project_output/', site, '_Table_Prone_Outcomes_by_Hospital.csv'))
 rm(tab2_excel)
+
+
 ```
 
 ```{r Function to Summarise Logistic Regression Models}
@@ -1045,9 +1063,10 @@ prone_analytic_df <- prone_analytic_df |>
 
 ```{r Segmented Regression - Univariable}
 #For Sites with > 1 Hospital, Run Models with Fixed Effect for Hospital and Clustered Standard Errors 
-#For now these are Logistic Regressions
+#Uses Logistic Regression
 #This is the Model Form for Evaluating the Step Changes NOT taking Into Account Time Trends
-#First look at primary outcome proning within 12 hours. Then look at all proning. 
+
+#First look at primary outcome proning within 12 hours by Study Period. Then look at all proning. 
 if (n_hospitals>1) {
 model_form_step <- prone_12hour_outcome ~ study_period + factor(hospital_id)
 unvar_mod <- glm(model_form_step,
@@ -1062,6 +1081,22 @@ unvar_mod <- glm(model_form_step,
 
 summary(unvar_mod)
 unvar_mod_summary <- model_summary_table(unvar_mod)
+
+#First look at primary outcome proning within 12 hours by Study Period and COVID Status. Then look at all proning. 
+if (n_hospitals>1) {
+model_form_step <- prone_12hour_outcome ~ period_sarscov2 + factor(hospital_id)
+unvar_mod_sarscov2 <- glm(model_form_step,
+          data = prone_analytic_df, 
+          family=binomial)
+} else {
+model_form_step <- prone_12hour_outcome ~ period_sarscov2
+unvar_mod_sarscov2 <- glm(model_form_step,
+          data = prone_analytic_df, 
+          family=binomial)
+}
+
+summary(unvar_mod_sarscov2)
+unvar_mod_summary_sarscov2_status <- model_summary_table(unvar_mod_sarscov2)
 
 #This is the Model Form for Evaluating the Step Changes AND Time Trends
 #Will Scale STudy Month So Coefficients Tell Us About Change in Log Odds Per 3 month Change
@@ -1083,13 +1118,18 @@ unvar_mod_interact <- glm(model_form_step,
 summary(unvar_mod_interact)
 unvar_modinteract_summary <- model_summary_table(unvar_mod_interact)
 
-univar_table <- rowbind(unvar_mod_summary, data.frame('site'=c('','Model With Interaction Terms')), fill = TRUE) |>
-               rbind(unvar_modinteract_summary)
+univar_table <- bind_rows(
+  unvar_mod_summary,
+  data.frame(site = c("", "Model With Sars_Cov2 Status")),
+  unvar_mod_summary_sarscov2_status,
+  data.frame(site = c("", "Model With Interaction Terms")),
+  unvar_modinteract_summary
+)
 # Write the table to a CSV file
 write.csv(univar_table, paste0(project_location, '/project_output/', site, '_unadjusted_models.csv'))
 
 #Output a Table of Average Marginal Effects Using the AME Function Created Above
-model_list <- list(unvar_mod, unvar_mod_interact)
+model_list <- list(unvar_mod, unvar_mod_sarscov2, unvar_mod_interact)
 univar_ame <- ame_summary(model_list)
 write.csv(univar_ame, paste0(project_location, '/project_output/', site, '_unadjusted_ame.csv'))
 ```
@@ -1116,6 +1156,24 @@ multivar_mod <- glm(model_form_step,
 summary(multivar_mod)
 multivar_mod_summary <- model_summary_table(multivar_mod)
 
+#Full Model - with sars_cov2 stratification
+model_form_step <- prone_12hour_outcome ~ period_sarscov2 + age_scale + female + bmi_scale + factor(nee_pressor_dose) + sofa_score_scale +  
+  min_pf_ratio_scale + factor(hospital_id)
+#Now Modified for Each Site
+if (n_hospitals > 1) {
+  # Keep the formula as is
+  model_form_step <- model_form_step
+} else if (n_hospitals == 1) {
+  # Remove 'factor(hospital_id)'
+  model_form_step <- update(model_form_step, . ~ . - factor(hospital_id))
+}
+
+multivar_mod_sarscov2 <- glm(model_form_step,
+          data = prone_analytic_df, 
+          family=binomial)
+summary(multivar_mod_sarscov2)
+multivar_mod_summary_sarscov2 <- model_summary_table(multivar_mod_sarscov2)
+
 #This is the Model Form for Evaluating the Step Changes AND Time Trends
 #Will Scale STudy Month So Coefficients Tell Us About Change in Log Odds Per 3 month Change
 model_form_step <- prone_12hour_outcome ~ study_period + study_period:month_scaled + age_scale + female + bmi_scale + factor(nee_pressor_dose) + sofa_score_scale + min_pf_ratio_scale + factor(hospital_id)
@@ -1134,20 +1192,24 @@ multivar_mod_interact <- glm(model_form_step,
 summary(multivar_mod_interact)
 multivar_modinteract_summary <- model_summary_table(multivar_mod_interact)
 
-multivar_table <- rowbind(multivar_mod_summary, data.frame('site'=c('','Model With Interaction Terms')), fill = TRUE) |>
-               rbind(multivar_modinteract_summary)
+multivar_table <- bind_rows(
+  multivar_mod_summary, 
+  data.frame('site'=c('','Adjusted Model With Sars-CoV2 Status')),
+  multivar_mod_summary_sarscov2, 
+  data.frame('site'=c('','Adjusted Model With Interaction Term')),
+  multivar_modinteract_summary)
 # Write the table to a CSV file
 write.csv(multivar_table, paste0(project_location, '/project_output/', site, '_adjusted_models.csv'))
 
 #Output a Table of Average Marginal Effects Using the AME Function Created Above
-model_list <- list(multivar_mod, multivar_mod_interact)
+model_list <- list(multivar_mod, multivar_mod_sarscov2, multivar_mod_interact)
 multivar_ame <- ame_summary(model_list)
 write.csv(multivar_ame, paste0(project_location, '/project_output/', site, '_adjusted_ame.csv'))
 ```
 
 
 ```{r Post HOC Analysis Analyzing Just Step Change at Transition to COVID Period With Rate of Change Prior and After}
-#For Sites with PRE-COVID Data They Will A STep Change From Pre-COVID to COVID and then analyze effect of time (in 3 month interval before and after this step change)
+#For Sites with PRE-COVID Data They Will A STep Change From Pre-COVID to COVID and then analyze effect of time (in 3 month intervals before and after this step change)
 #For Sites without Pre-COVID Data There is No Period Change and the Interest is in the Rate of Proning Decline Over the Study Period
 prone_analytic_df <- prone_analytic_df |>
    mutate(covid_period=fcase(
@@ -1237,8 +1299,6 @@ write.csv(two_period_ame, paste0(project_location, '/project_output/', site, '_t
 
 
 ```{r Segmented Regression - Univariable - 24h}
-#For Sites with > 1 Hospital, Run Mixed Effects Models Otherwise Run as Logistic Regression
-#For now these are Logistic Regressions
 #This is the Model Form for Evaluating the Step Changes NOT taking Into Account Time Trends
 #Look at all proning outcome. 
 if (n_hospitals>1) {
@@ -1831,6 +1891,23 @@ df_agg <- df |>
 
 #Save CSV
 write.csv(df_agg, paste0(project_location, '/project_output/', site, '_aggregate_expected_prone.csv'))
+
+#Create Aggregate Dataset with Observed and Expected Events as well as N Broken Out by SARS Cov2 Status
+df_agg_sars_status <- df |>
+  group_by(hospital_id, period_sarscov2) |>
+  summarise(
+    n_patients = n(),
+    observed_prone = sum(prone_12hour_outcome, na.rm=TRUE),
+    prone_rate_observed = mean(prone_12hour_outcome, na.rm=TRUE),
+    prone_rate_adjust = mean(prone_propensity, na.rm = TRUE)
+  ) |>
+  ungroup() |>
+  filter(!is.na(hospital_id)) |>
+  mutate(expected_prone=round((prone_rate_adjust*n_patients), digits = 0)) |>
+  mutate(not_prone=n_patients-observed_prone)
+
+#Save CSV
+write.csv(df_agg_sars_status, paste0(project_location, '/project_output/', site, '_aggregate_expected_prone_wCOVID-Status.csv'))
 ```
 ```{r}
 cat('This code is DONE!!! Thank you for your support for this CLIF project!')
