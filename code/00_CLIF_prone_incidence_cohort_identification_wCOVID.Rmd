@@ -11,9 +11,9 @@ output: html_document
 #Time Zone Options for this Analysis: EST = 'America/New_York', CST = 'America/Chicago', PST = 'America/Los_Angeles'
 
 site_time_zone <- 'America/New_York'
-tables_location <- '~/workspace/Storage/chochbe1/JH_CCRD/CLIF/rclif'
-project_location <- '~/workspace/Storage/chochbe1/JH_CCRD/CLIF/CLIF_Projects/CLIF_prone_incidence'
-site <- "Hopkins"
+tables_location <- 'Z:/barker/clif_3_22/CLIF-2.0.0-dttm-update-R'
+project_location <- 'Z:/barker/clif_3_22/CLIF-2.0.0-dttm-update-R'
+site <- "Michigan"
 file_type <- "parquet"
 
 check_timezone <- function(site_timezone, intended_timezone = Sys.timezone()) {
@@ -1391,7 +1391,7 @@ sars_cov2 <- clif_microbiology_nonculture |>
   filter(lab_collect_dttm<=t_enrollment & lab_collect_dttm>=t_enrollment-dweeks(4)) |>
   group_by(patient_id, encounter_block) |>
   mutate(sars_cov2_positive=fifelse(
-    sum(result_category=='detected', na.rm=TRUE)>=1, 1, 0)) |>
+    sum(tolower(result_category)=='detected', na.rm=TRUE)>=1, 1, 0)) |>
   filter(row_number()==1) |>
   select(patient_id, encounter_block, sars_cov2_positive)
 
