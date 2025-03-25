@@ -1869,6 +1869,12 @@ alt_mod <- glm(alt_form,
                data = prone_analytic_df, 
                family=binomial)
 
+#Collect Coefficient and Covariance Matrix for Centralized Creation of Global Coefficient
+propensity_build_estimates <- model_summary_table(alt_mod)
+propensity_build_covariance <- as.data.frame(vcov(alt_mod))
+write.csv(propensity_build_estimates, paste0(project_location, '/project_output/', site, '_propensity_build_estimates.csv'))
+write.csv(propensity_build_covariance, paste0(project_location, '/project_output/', site, '_propensity_build_covariance.csv'))
+
 #Extract Dataset from Model
 df <- alt_mod$data
 #Propensity Score Taken from Prediction
