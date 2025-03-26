@@ -8,13 +8,12 @@ output: html_document
 #Specify File Paths, Project Path and Site - SITE SPECIFIC
 #Load the Analytic File
 ```{r}
-#Time Zone Options for this Analysis: EST = 'America/New_York', CST = 'America/Chicago', PST = 'America/Los_Angeles'
 
-site_time_zone <- 'America/New_York'
-tables_location <- '~/workspace/Storage/chochbe1/JH_CCRD/CLIF/rclif'
-project_location <- '~/workspace/Storage/chochbe1/JH_CCRD/CLIF/CLIF_Projects/CLIF_prone_incidence'
-site <- "Hopkins"
-file_type <- "parquet"
+site_time_zone <-"" #Add your local time zone prior to UTC conversion, options for this Analysis are EST = 'America/New_York', CST = 'America/Chicago', PST = 'America/Los_Angeles' 
+tables_location <-"" #Add local path to CLIF tables, ex. 'Z:/barker/clif_3_22/CLIF-2.0.0-dttm-update-R'
+project_location <-"" #Add local path to project location, where results will output
+site <-"" #Add local site name
+file_type <-"" #Options are "parquet" or "csv"
 
 check_timezone <- function(site_timezone, intended_timezone = Sys.timezone()) {
   if (site_timezone != intended_timezone) {
@@ -188,7 +187,7 @@ prone_analytic_df <- prone_analytic_df |>
     study_period_cat==3 & sars_cov2_positive=='Positive','Post-COVID_SarsCov2Pos',
     study_period_cat==3 & sars_cov2_positive %in% c('Negative', 'Unknown'), 'Post-COVID_SarsCov2Neg-Unk'
   )) |>
-  #Given the POST-covid Sars_cov2 + is a small population will collapse that into post-COVID for some analysis
+  #Given the POST-covid Sars_cov2 + is a small population will collapse that into post-COVID for some analysis, COVID-Negative is Reference
   mutate(period_sarscov2_post=fcase(
     study_period_cat==2, 'Pre-COVID', 
     study_period_cat==1 & sars_cov2_positive=='Positive', 'COVID_SarsCov2Pos',
@@ -1106,11 +1105,11 @@ prone_analytic_df <- prone_analytic_df |>
 #For Regressions Have the covid_sars_cov2+ period as reference
 # Convert to an unordered factor
 prone_analytic_df$period_sarscov2 <- factor(prone_analytic_df$period_sarscov2, ordered = FALSE)
-# Now relevel to set 'COVID_SarsCov2Pos' as the reference group
-prone_analytic_df$period_sarscov2 <- relevel(prone_analytic_df$period_sarscov2, ref = "COVID_SarsCov2Pos")
+# Now relevel to set 'COVID_SarsCov2Neg-Unk' as the reference group
+prone_analytic_df$period_sarscov2 <- relevel(prone_analytic_df$period_sarscov2, ref = "COVID_SarsCov2Neg-Unk")
 #Repeat for SarsCov2 only in the COVID Period
 prone_analytic_df$period_sarscov2_post <- factor(prone_analytic_df$period_sarscov2_post, ordered = FALSE)
-prone_analytic_df$period_sarscov2_post <- relevel(prone_analytic_df$period_sarscov2_post, ref = "COVID_SarsCov2Pos")
+prone_analytic_df$period_sarscov2_post <- relevel(prone_analytic_df$period_sarscov2_post, ref = "COVID_SarsCov2Neg-Unk")
 
 
 #For Sites with > 1 Hospital, Run Models with Fixed Effect for Hospital and Clustered Standard Errors 
@@ -1632,7 +1631,25 @@ df_agg_sars_status <- df |>
 
 #Save CSV
 write.csv(df_agg_sars_status, paste0(project_location, '/project_output/', site, '_aggregate_expected_prone_wCOVID-Status.csv'))
+
+#Create Aggregate Dataset with Observed and Expected Events as well as N Broken Out by SARS Cov2 Status
+df_agg_sars_status <- df |>
+  group_by(hospital_id, period_sarscov2_post) |>
+  summarise(
+    n_patients = n(),
+    observed_prone = sum(prone_12hour_outcome, na.rm=TRUE),
+    prone_rate_observed = mean(prone_12hour_outcome, na.rm=TRUE),
+    prone_rate_adjust = mean(prone_propensity, na.rm = TRUE)
+  ) |>
+  ungroup() |>
+  filter(!is.na(hospital_id)) |>
+  mutate(expected_prone=round((prone_rate_adjust*n_patients), digits = 0)) |>
+  mutate(not_prone=n_patients-observed_prone)
+
+#Save CSV
+write.csv(df_agg_sars_status, paste0(project_location, '/project_output/', site, '_aggregate_expected_prone_wCOVID-Status_post.csv'))
 ```
+
 ```{r}
 cat('This code is DONE!!! Thank you for your support for this CLIF project!')
 ```
