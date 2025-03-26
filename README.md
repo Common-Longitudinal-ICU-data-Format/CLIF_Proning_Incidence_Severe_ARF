@@ -16,26 +16,29 @@ The following tables are required:
 3. **vitals**: `hospitalization_id`, `recorded_dttm`, `vital_category`, `vital_value`
    - `vital_category` = 'height_cm', 'weight_kg', 'map'
 4. **labs**: `hospitalization_id`, `lab_result_dttm`, `lab_category`, `lab_value`
-   - `lab_category` = 'po2_arterial'
+   - `lab_category` = 'po2_arterial', 'creatinine', 'bilirubin'
 5. **medication_admin_continuous**: `hospitalization_id`, `admin_dttm`, `med_name`, `med_category`, `med_dose`, `med_dose_unit`
    - `med_category` = "norepinephrine", "epinephrine", "phenylephrine", "vasopressin", "dopamine", "angiotensin", "cisatracurium"
 6. **respiratory_support**: `hospitalization_id`, `recorded_dttm`, `device_category`, `mode_category`, `tracheostomy`, `fio2_set`, `peep_set`
 7. **position**: `hospitalization_id`, `recorded_dttm`, `position_category`
+8. **microbiology_nonculture**:'patient_id', and sars_cov2 tests
+9. **patient_assessments**:'hospitalization_id', 'rass'
 
 
 ## Cohort identification
 Inclusion Criteria: 
-1)	Adults (> 18 years) with moderate-severe hypoxemic respiratory failure requiring invasive mechanical ventilation (IMV) between 2018-2023 (NOTE: Not all sites may have full range of data, but will use the years of each database)
+1)	Adults (> 18 years) with moderate-severe hypoxemic respiratory failure requiring invasive mechanical ventilation (IMV) between 2018-2024
+   (NOTE: Not all sites may have full range of data, but will use the years of each database)
 
 2)	Patient meets PROSEVA criteria for proning defined as: 
-a.	P/F < 150 on PEEP > 5 and FiO2 > 0.6 (uses ABG measurements only, no imputation)
+a.	P/F <= 150 on PEEP >= 5 and FiO2 >= 0.6 (uses ABG measurements only, no imputation)
 b.	Criteria are met in the first 36 hours of IMV initiation (t_PROSEVA_first)
       AND
 i.	Confirmed on second qualifying blood gas in a 12-hour window beginning 12 hours after the first eligible blood gas (t_proseva_first + 12 hours > t_proseva_second < t_proseva_first + 24 hours)
                    OR
 ii.	Patient is proned within 24 hours of initial qualifying blood gas (t_PROSEVA_first < t_proning < t_PROSEVA_first + 24 hours)
 
-3)	For patients meeting the above inclusions, time of enrollment (t_enrollment) is the earlier of time of second qualifying PROSEVA ABG OR time of proning (if patient proned prior to meeting criteria second time). 
+4)	For patients meeting the above inclusions, time of enrollment (t_enrollment) is the earlier of time of second qualifying PROSEVA ABG OR time of proning (if patient proned prior to meeting criteria second time). 
 
 
 Exclusion Criteria: 
@@ -44,7 +47,7 @@ a.	Operationalization:
 i.	OPTION A: If a patient’s first ADT observation is not the ED (location_category!=’ED’) AND first device_category==’IMV’ exclude
 ii.	OPTION B: Use admission_category!=’Transfer’ [syntax not yet in CLIF]
 2)	Tracheostomy recorded prior to completing first 24 hours of the first episode of mechanical ventilation (includes tracheostomy on admission)
-3)	On ECMO within 12-hours of t_enrollment [Will work into future iterations of project once ECMO table built]
+3)	In the operating room in the 48 hours prior to meeting enrollment criteria
 4)	For patients with more than 1 eligible encounter within a given CLIF consortium system, 1 eligible encounter per patient will be randomly selected and included
 
 ## Expected Results
@@ -63,16 +66,13 @@ All Packages are coded into the cohort_identification and analysis scripts and c
 
 ## 2. Run code
 Can run both scripts as R markdown files with the 'knit' function in R
-1. Run cohort_identification_prone_incidence.Rmd script to define the ARF cohort. 
-2. Run analysis script CLIF_prone_incidence_analysis_FixedEffects.Rmd to perform analysis and generate output. 
-*** Note: This is the Fixed Effects version, NOT the version entitled CLIF_prone_incidence_analysis. 
+1. Run 00_cohort_identification_prone_incidence_wCovid.Rmd script to define the ARF cohort. 
+2. Run analysis script: 01_CLIF_prone_incidence_analysis_wCOVID.Rmd to perform analysis and generate output. 
 
-Detailed instructions on the code workflow are provided in the [code directory](code/README.md)
+## 3. Upload results from the project_output (tables and graphs) to the UChicago Box Folder. 
 
-
-## Example Repositories
-* [CLIF Adult Sepsis Events](https://github.com/08wparker/CLIF_adult_sepsis_events) for R
-* [CLIF Eligibility for mobilization](https://github.com/kaveriC/mobilization) for Python
+## 4. Await global coefficicents
+**The investigators plan to calculate global fixed effects coefficients and will send a short third analytic file to extract fixed effects adjustment for a mixed effect model attempting to quantify variation betweeen hospitals in proning rates. This will be done in a third step. **
 ---
 
 
