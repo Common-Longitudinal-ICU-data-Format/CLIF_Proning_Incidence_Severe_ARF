@@ -1,0 +1,292 @@
+---
+title: "CLIF_prone_incidence_analysis"
+author: "Anna Barker and Chad Hochberg"
+date: "`r Sys.Date()`"
+output: html_document
+---
+#Last File to Be Run; Only Run Once Anna and Chad Have Collated Prior Fixed Effects And Distributed Global Estimates
+#Specify File Paths, Project Path and Site - SITE SPECIFIC
+#Load the Analytic File
+```{r}
+#Add your local time zone prior to UTC conversion, options for this Analysis are EST = 'America/New_York', CST = 'America/Chicago', PST = 'America/Los_Angeles' 
+site_time_zone <- 'America/New_York'
+tables_location <- '~/workspace/Storage/chochbe1/JH_CCRD/CLIF/rclif'
+project_location <- '~/workspace/Storage/chochbe1/JH_CCRD/CLIF/CLIF_Projects/CLIF_prone_incidence'
+site <- "Hopkins"
+file_type <- "parquet"
+
+check_timezone <- function(site_timezone, intended_timezone = Sys.timezone()) {
+  if (site_timezone != intended_timezone) {
+    cat("Warning: You specified", site_timezone, "but your system time zone is", intended_timezone, "\n")
+    response <- readline(prompt = "Was that intentional? (yes/no): ")
+    
+    if (tolower(response) %in% c("no", "n")) {
+      new_timezone <- readline(prompt = "Please enter the correct timezone: ")
+      cat("Timezone updated to", new_timezone, "\n")
+      return(new_timezone)
+    } else {
+      cat("Proceeding with the originally specified timezone:", site_timezone, "\n")
+      return(site_timezone)
+    }
+    
+  } else {
+    cat("Timezone is set to", site_timezone, "\n")
+    return(site_timezone)
+  }
+}
+
+
+#Time Zone Check
+result <- check_timezone(site_time_zone)
+```
+
+
+```{r Load Needed Libraries, include=FALSE}
+packages <- c("lubridate", 
+              "tidyverse", 
+              "readr", 
+              "arrow", 
+              "collapse", 
+              "data.table") #Predictions and Average Slopes for Average Marginal Effects
+
+install_if_missing <- function(package) {
+  if (!require(package, character.only = TRUE)) {
+    install.packages(package, dependencies = TRUE)
+    library(package, character.only = TRUE)
+  }
+}
+
+sapply(packages, install_if_missing)
+rm(packages, install_if_missing)
+
+#Use Dplyr select as default
+select <- dplyr::select
+
+#Create Sub Folders for Graphs within Project Output Folder
+# Check if the output directory exists; if not, create it
+if (!dir.exists(paste0(project_location, "/project_output/graphs"))) {
+  dir.create(paste0(project_location, "/project_output/graphs"))
+}
+
+```
+
+```{r Function to Convert Datetimes to Local Time Zone}
+#Write Function to Convert Datetime Columns to 'UTC'
+fn.timezone_tolocal <- function(df) {
+  # Get the dataset schema
+  sch <- df$schema
+  #Which Fields are Datetime Types?
+  datetime_fields <- keep(sch$fields, function(field) {
+    grepl("^timestamp", field$type$ToString())
+  })
+  # Extract the names of these datetime columns
+  datetime_cols <- map_chr(datetime_fields, "name")
+  
+  #Now Convert DateTime Columns to Local Timezone
+  df <- df %>%
+    mutate(across(all_of(datetime_cols), ~ cast(.x, arrow::timestamp("us", site_time_zone)))) |>
+    compute()
+}
+```
+
+
+
+```{r Load Site-specific analytic data set and Convert to Local Time Zone}
+#NOTE: This Table is Created by the 
+prone_analytic_df <- open_dataset(paste0(project_location, '/project_tables/prone_analytic_data.parquet')) 
+
+#Apply Function to Convert to Local Timezone
+prone_analytic_df <- fn.timezone_tolocal(prone_analytic_df)
+  
+#Bring Into R Environment as Dataframe
+prone_analytic_df <- prone_analytic_df |> collect()
+
+#Load Global Coefficicents
+global_coefficients <- read_csv(
+  "https://raw.githubusercontent.com/chochbe1/CLIF_prone_incidence_severeARF/main/output/intermediate/global_coefficients.csv"
+)
+```
+
+#Finalize Structure of Analytic Dataset
+```{r Define Study Months/Quarters}
+#Further Define sex_category as female 1, male/other/unknown 0
+prone_analytic_df <- prone_analytic_df |>
+  mutate(female=fifelse(tolower(sex_category)=='female', 1, 0)) |>
+  #Define Calendar Time for Time of Enrollment
+  mutate(year=year(t_enrollment)) |>
+  mutate(calendar_month=month(t_enrollment)) |>
+  arrange(year, calendar_month)
+
+#Report Out Minimum and Maximum Times
+cat('At', site, 'the first eligible patient was enrolled on', as.character(first(prone_analytic_df$t_enrollment)), 
+    '\n and the last on', as.character(last(prone_analytic_df$t_enrollment)))
+
+#Create a Study Month Data Frame to Merge to Create Study Month; Can Adjust ym() to accomadte desired period; for this analysis 2018 through 2024
+study_month <- data.frame(start_date=seq(ym("201801"), ym("202412"), by= "months")) |>
+  mutate(calendar_month=month(start_date)) |>
+  mutate(year=year(start_date)) |>
+  arrange(year, calendar_month) |>
+  mutate(study_month=seq(1:n())) |>
+  select(-start_date) |>
+  mutate(study_quarter=ceiling(study_month/3))
+
+#Now Merge to Prone Analytic_DF
+prone_analytic_df <- prone_analytic_df |>
+  left_join(study_month) 
+ 
+#Define the Pre-Specified Study Periods
+#Jan 2018-Feb 2020 'Pre-COVID', March 2020-February 2022 'COVID', March 2022-December 2023 'Post_COVID'
+#So that All Sites Can Participate Will use the COVID Period as The Reference
+prone_analytic_df <- prone_analytic_df |>
+  mutate(study_period=fcase(
+    study_month>=1 & study_month<27, 'Pre-COVID',
+    study_month>=27 & study_month<51, 'COVID',
+    study_month>=51, 'Post-COVID'
+  )) |>
+  mutate(study_period_cat=factor(study_period,
+                               levels = c("COVID", "Pre-COVID", "Post-COVID"),
+                               labels = c(1, 2, 3)))
+
+#In this script we keep track of the minimum and maximum study month both for graphs and for the modelling
+min_month <- min(prone_analytic_df$study_month)
+max_month <- max(prone_analytic_df$study_month)
+min_quarter <- min(prone_analytic_df$study_quarter)
+max_quarter <- max(prone_analytic_df$study_quarter)
+
+#Create 'site_type' vector that shows Which study periods are Included
+site_type <- prone_analytic_df |>
+  distinct(study_period) 
+site_type <- paste(site_type$study_period, collapse = ",")
+#Possible Combinations are "Pre-COVID,COVID,Post-COVID"|"COVID,Post-COVID"|"Pre-COVID,"COVID"
+
+#Keep Track of the Number of Hospitals
+n_hospitals <- length(unique(prone_analytic_df$hospital_id[!is.na(prone_analytic_df$hospital_id)]))
+
+#Create a Few More Variables
+prone_analytic_df <- prone_analytic_df |>
+  mutate(admit_to_enrolled=as.duration(t_enrollment-final_admission_dttm)/dhours(1)) |>
+  mutate(ett_to_enrolled=as.duration(t_enrollment-vent_episode_start)/dhours(1)) |>
+  mutate(severe_ards=fifelse(min_pf_ratio<100, 1, 0))
+
+#Create a 'Unknown' Category for SARS COV2 - THis is if we can't confirm a positive or negative SARS-Cov2 test in the COVID or Post-COVID era
+prone_analytic_df <- prone_analytic_df |>
+  mutate(sars_cov2_positive=fcase(
+    sars_cov2_positive==1, 'Positive', 
+    sars_cov2_positive==0, 'Negative',
+    study_period_cat %in% c(1, 3) & is.na(sars_cov2_positive), 'Unknown',
+    study_period_cat %in% c(2), 'Pre-COVID'
+  )) |>
+  #Create Period-Sars-COV2 Status Categorical Variables - For Categorical Variable COVID-Negative Could be Reference
+  mutate(period_sarscov2=fcase(
+    study_period_cat==2, 'Pre-COVID', 
+    study_period_cat==1 & sars_cov2_positive=='Positive', 'COVID_SarsCov2Pos',
+    study_period_cat==1 & sars_cov2_positive %in% c('Negative', 'Unknown'), 'COVID_SarsCov2Neg-Unk',
+    study_period_cat==3 & sars_cov2_positive=='Positive','Post-COVID_SarsCov2Pos',
+    study_period_cat==3 & sars_cov2_positive %in% c('Negative', 'Unknown'), 'Post-COVID_SarsCov2Neg-Unk'
+  )) |>
+  #Given the POST-covid Sars_cov2 + is a small population will collapse that into post-COVID for some analysis, COVID-Negative is Reference
+  mutate(period_sarscov2_post=fcase(
+    study_period_cat==2, 'Pre-COVID', 
+    study_period_cat==1 & sars_cov2_positive=='Positive', 'COVID_SarsCov2Pos',
+    study_period_cat==1 & sars_cov2_positive %in% c('Negative', 'Unknown'), 'COVID_SarsCov2Neg-Unk',
+    study_period_cat==3,'Post-COVID'
+  ))
+
+#Scaled Variables
+prone_analytic_df <- prone_analytic_df |>
+  mutate(
+    age_scale=as.numeric(scale(age_at_admission)),
+    bmi_scale=as.numeric(scale(bmi)),
+    min_pf_ratio_scale=as.numeric(scale(min_pf_ratio)),
+    sofa_score_scale=as.numeric(scale(sofa_score))
+  )
+```
+
+
+```{r Create Estimated Log Odds of Proning and Probability for Each Row}
+#This was the Model of 'Fixed Effects'
+alt_form <- prone_12hour_outcome ~ age_scale  + female +
+  bmi + factor(nee_pressor_dose) +sofa_score_scale + min_pf_ratio_scale
+
+prone_propensity <- prone_analytic_df |>
+  mutate(
+    #Need to Make Norepi Into Dummy Variables
+    norepi_0=fifelse(nee_pressor_dose==0, 1, 0),
+    norepi_1=fifelse(nee_pressor_dose==1, 1, 0),
+    norepi_2=fifelse(nee_pressor_dose==2, 1, 0),
+    #Now Calculate Model -- on Log odds Scale for EACH row
+    prone_log_odds=
+           global_coefficients$`coef_(Intercept)` +
+           age_scale*global_coefficients$coef_age_scale +
+           female*global_coefficients$coef_female +
+           bmi*global_coefficients$coef_bmi +
+           norepi_0*0 +
+           norepi_1*global_coefficients$`coef_factor(nee_pressor_dose)1` +
+           norepi_2*global_coefficients$`coef_factor(nee_pressor_dose)2` +
+           sofa_score_scale*global_coefficients$coef_sofa_score_scale +
+           min_pf_ratio_scale*global_coefficients$coef_min_pf_ratio_scale,
+    prone_propensity=plogis(prone_log_odds))
+
+```
+
+
+
+```{r Last Piece Create a Table with Observed and Expected Proning Counts/Rates by Period and Hospital}
+#This Aggregate Data Will be Used for Risk and Reliability Adjusted Proning Rate Estimates by Hospital and Period and Will Use the 'Global' Fixed Effects Estimates
+
+#Each SIte Aggregates Data
+#Create Aggregate Dataset with Observed and Expected Events as well as N
+global_agg <- prone_propensity |>
+  group_by(hospital_id, study_period) |>
+  summarise(
+    n_patients = n(),
+    observed_prone = sum(prone_12hour_outcome, na.rm=TRUE),
+    prone_rate_observed = mean(prone_12hour_outcome, na.rm=TRUE),
+    prone_rate_adjust = mean(prone_propensity, na.rm = TRUE)
+  ) |>
+  ungroup() |>
+  filter(!is.na(hospital_id)) |>
+  mutate(expected_prone=round((prone_rate_adjust*n_patients), digits = 0)) |>
+  mutate(not_prone=n_patients-observed_prone)
+
+#Save CSV
+write.csv(global_agg, paste0(project_location, '/project_output/', site, '_global_aggregate_expected_prone.csv'))
+
+#Create Aggregate Dataset with Observed and Expected Events as well as N Broken Out by SARS Cov2 Status
+global_agg_sars_status <- prone_propensity |>
+  group_by(hospital_id, period_sarscov2) |>
+  summarise(
+    n_patients = n(),
+    observed_prone = sum(prone_12hour_outcome, na.rm=TRUE),
+    prone_rate_observed = mean(prone_12hour_outcome, na.rm=TRUE),
+    prone_rate_adjust = mean(prone_propensity, na.rm = TRUE)
+  ) |>
+  ungroup() |>
+  filter(!is.na(hospital_id)) |>
+  mutate(expected_prone=round((prone_rate_adjust*n_patients), digits = 0)) |>
+  mutate(not_prone=n_patients-observed_prone)
+
+#Save CSV
+write.csv(global_agg_sars_status, paste0(project_location, '/project_output/', site, '_global_aggregate_expected_prone_wCOVID-Status.csv'))
+
+#Create Aggregate Dataset with Observed and Expected Events as well as N Broken Out by SARS Cov2 Status
+global_agg_sars_status <- prone_propensity |>
+  group_by(hospital_id, period_sarscov2_post) |>
+  summarise(
+    n_patients = n(),
+    observed_prone = sum(prone_12hour_outcome, na.rm=TRUE),
+    prone_rate_observed = mean(prone_12hour_outcome, na.rm=TRUE),
+    prone_rate_adjust = mean(prone_propensity, na.rm = TRUE)
+  ) |>
+  ungroup() |>
+  filter(!is.na(hospital_id)) |>
+  mutate(expected_prone=round((prone_rate_adjust*n_patients), digits = 0)) |>
+  mutate(not_prone=n_patients-observed_prone)
+
+#Save CSV
+write.csv(global_agg_sars_status, paste0(project_location, '/project_output/', site, '_global_aggregate_expected_prone_wCOVID-Status_post.csv'))
+```
+
+```{r}
+cat('This code is DONE!!! Thank you for your support for this CLIF project!')
+```
