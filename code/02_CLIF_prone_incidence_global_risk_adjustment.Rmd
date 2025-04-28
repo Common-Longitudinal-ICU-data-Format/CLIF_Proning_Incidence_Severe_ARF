@@ -291,6 +291,7 @@ global_agg_by_prone <- prone_propensity |>
   group_by(hospital_id, prone_12hour_outcome) |>
   summarise(
     n_patients = n(),
+    observed_prone = sum(prone_12hour_outcome, na.rm=TRUE),
     prone_rate_adjust = mean(prone_propensity, na.rm = TRUE)
   ) |>
   ungroup() |>
