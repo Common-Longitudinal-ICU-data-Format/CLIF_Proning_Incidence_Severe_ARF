@@ -285,6 +285,21 @@ global_agg_sars_status <- prone_propensity |>
 
 #Save CSV
 write.csv(global_agg_sars_status, paste0(project_location, '/project_output/', site, '_global_aggregate_expected_prone_wCOVID-Status_post.csv'))
+
+#Now Risk of Proning in Proned and Unproned Groups
+global_agg_by_prone <- prone_propensity |>
+  group_by(hospital_id, prone_12hour_outcome) |>
+  summarise(
+    n_patients = n(),
+    prone_rate_adjust = mean(prone_propensity, na.rm = TRUE)
+  ) |>
+  ungroup() |>
+  filter(!is.na(hospital_id)) |>
+  mutate(expected_prone=round((prone_rate_adjust*n_patients), digits = 0)) |>
+  mutate(not_prone=n_patients-observed_prone)
+
+#Save CSV
+write.csv(global_agg_by_prone, paste0(project_location, '/project_output/', site, '_global_aggregate_pronerisk_by_outcome.csv'))
 ```
 
 ```{r}
