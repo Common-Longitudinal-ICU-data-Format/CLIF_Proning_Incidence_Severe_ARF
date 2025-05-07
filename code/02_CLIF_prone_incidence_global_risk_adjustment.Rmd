@@ -195,11 +195,10 @@ prone_analytic_df <- prone_analytic_df |>
 #Scaled Variables
 prone_analytic_df <- prone_analytic_df |>
   mutate(
-    age_scale=as.numeric(scale(age_at_admission)),
-    bmi_scale=as.numeric(scale(bmi)),
-    min_pf_ratio_scale=as.numeric(scale(min_pf_ratio)),
-    sofa_score_scale=as.numeric(scale(sofa_score))
-  )
+    age_scale=(age_at_admission-60)/10,
+    bmi_scale=(bmi-30)/5,
+    min_pf_ratio_scale=(min_pf_ratio-80)/10,
+    sofa_score_scale=(sofa_score-9))
 ```
 
 
