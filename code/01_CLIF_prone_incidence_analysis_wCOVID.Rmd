@@ -1091,13 +1091,13 @@ ame_summary <- function(model_list) {
 }
 
 #To Aid In Intrepretability Plan to Scale Each of The Continuous Variables
+#Will Use Global Mean from Preliminary Data to Center Each Variable and then Scale by Reasonable Delta
 prone_analytic_df <- prone_analytic_df |>
   mutate(
-    age_scale=as.numeric(scale(age_at_admission)),
-    bmi_scale=as.numeric(scale(bmi)),
-    min_pf_ratio_scale=as.numeric(scale(min_pf_ratio)),
-    sofa_score_scale=as.numeric(scale(sofa_score))
-  )
+    age_scale=(age_at_admission-60)/10,
+    bmi_scale=(bmi-30)/5,
+    min_pf_ratio_scale=(min_pf_ratio-80)/10,
+    sofa_score_scale=(sofa_score-9))
 ```
 
 
