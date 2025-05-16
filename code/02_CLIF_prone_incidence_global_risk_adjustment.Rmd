@@ -205,7 +205,7 @@ prone_analytic_df <- prone_analytic_df |>
 ```{r Create Estimated Log Odds of Proning and Probability for Each Row}
 #This was the Model of 'Fixed Effects'
 alt_form <- prone_12hour_outcome ~ age_scale  + female +
-  bmi + factor(nee_pressor_dose) +sofa_score_scale + min_pf_ratio_scale
+  bmi + factor(nee_pressor_dose) + sofa_score_scale + min_pf_ratio_scale
 
 prone_propensity <- prone_analytic_df |>
   mutate(
@@ -270,7 +270,7 @@ write.csv(global_agg_sars_status, paste0(project_location, '/project_output/', s
 
 #Create Aggregate Dataset with Observed and Expected Events as well as N Broken Out by SARS Cov2 Status
 global_agg_sars_status <- prone_propensity |>
-  group_by(hospital_id, period_sarscov2_post) |>
+  group_by(hospital_id, period_sarscov2_post, prone_12hour_outcome) |>
   summarise(
     n_patients = n(),
     observed_prone = sum(prone_12hour_outcome, na.rm=TRUE),
@@ -300,6 +300,22 @@ global_agg_by_prone <- prone_propensity |>
 
 #Save CSV
 write.csv(global_agg_by_prone, paste0(project_location, '/project_output/', site, '_global_aggregate_pronerisk_by_outcome.csv'))
+
+#Now Risk of Proning in Proned and Unproned Groups by Period
+global_agg_by_prone_period <- prone_propensity |>
+  group_by(hospital_id, prone_12hour_outcome, study_period) |>
+  summarise(
+    n_patients = n(),
+    observed_prone = sum(prone_12hour_outcome, na.rm=TRUE),
+    prone_rate_adjust = mean(prone_propensity, na.rm = TRUE)
+  ) |>
+  ungroup() |>
+  filter(!is.na(hospital_id)) |>
+  mutate(expected_prone=round((prone_rate_adjust*n_patients), digits = 0)) |>
+  mutate(not_prone=n_patients-observed_prone)
+
+#Save CSV
+write.csv(global_agg_by_prone_period, paste0(project_location, '/project_output/', site, '_global_aggregate_pronerisk_by_outcome_period.csv'))
 ```
 
 ```{r}
