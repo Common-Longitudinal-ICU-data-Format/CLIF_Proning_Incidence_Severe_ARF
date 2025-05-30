@@ -9,11 +9,11 @@ output: html_document
 #Load the Analytic File
 ```{r}
 
-site_time_zone <-"" #Add your local time zone prior to UTC conversion, options for this Analysis are EST = 'America/New_York', CST = 'America/Chicago', PST = 'America/Los_Angeles' 
-tables_location <-"" #Add local path to CLIF tables, ex. 'Z:/barker/clif_3_22/CLIF-2.0.0-dttm-update-R'
-project_location <-"" #Add local path to project location, where results will output
-site <-"" #Add local site name
-file_type <-"" #Options are "parquet" or "csv"
+site_time_zone <-"America/New_York" #Add your local time zone prior to UTC conversion, options for this Analysis are EST = 'America/New_York', CST = 'America/Chicago', PST = 'America/Los_Angeles' 
+tables_location <-"Z:/barker/clif_3_22/CLIF-2.0.0-dttm-update-R"
+project_location <-"Z:/barker/clif_3_22/" #Add local path to project location, where results will output
+site <-"U Michigan" #Add local site name
+file_type <-"parquet" #Options are "parquet" or "csv"
 
 check_timezone <- function(site_timezone, intended_timezone = Sys.timezone()) {
   if (site_timezone != intended_timezone) {
