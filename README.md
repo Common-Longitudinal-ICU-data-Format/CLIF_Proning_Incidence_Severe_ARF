@@ -6,7 +6,7 @@ Evaluate the Incidence of Prone Positioning for Patients with Severe Hypoxemic R
 
 ## Required CLIF tables and fields
 
-Please refer to the online [CLIF data dictionary](https://clif-consortium.github.io/website/data-dictionary.html), [ETL tools](https://github.com/clif-consortium/CLIF/tree/main/etl-to-clif-resources), and [specific table contacts](https://github.com/clif-consortium/CLIF?tab=readme-ov-file#relational-clif) for more information on constructing the required tables and fields.
+Please refer to the online [CLIF data dictionary](https://clif-consortium.github.io/website/data-dictionary/data-dictionary-2.0.0.html), [ETL tools](https://clif-consortium.github.io/website/tools.html), and [specific table contacts](https://github.com/clif-consortium/CLIF?tab=readme-ov-file#relational-clif) for more information on constructing the required tables and fields.
 
 
 The following tables are required:
@@ -44,8 +44,7 @@ ii.	Patient is proned within 24 hours of initial qualifying blood gas (t_PROSEVA
 Exclusion Criteria: 
 1)	Mechanical ventilation initiated at outside hospital:
 a.	Operationalization: 
-i.	OPTION A: If a patient’s first ADT observation is not the ED (location_category!=’ED’) AND first device_category==’IMV’ exclude
-ii.	OPTION B: Use admission_category!=’Transfer’ [syntax not yet in CLIF]
+i. If a patient’s first ADT observation is not the ED (location_category!=’ED’) AND first device_category==’IMV’ exclude
 2)	Tracheostomy recorded prior to completing first 24 hours of the first episode of mechanical ventilation (includes tracheostomy on admission)
 3)	In the operating room in the 48 hours prior to meeting enrollment criteria
 4)	For patients with more than 1 eligible encounter within a given CLIF consortium system, 1 eligible encounter per patient will be randomly selected and included
@@ -57,22 +56,26 @@ ii.	OPTION B: Use admission_category!=’Transfer’ [syntax not yet in CLIF]
 3. Will output prone_outcomes.csv table that includes site-specific aggregate proning cohort data per month.
 4. Will output results of regression models, for use in aggregative cross-federation analysis.  
 
- The final project results should be saved in the UChicago box folder. 
-
 ## Detailed Instructions for running the project
 
 ## 1. Setup Project Environment
-All Packages are coded into the cohort_identification and analysis scripts and can be run in an RStudio. 
+All Packages are coded into the cohort_identification and analysis scripts and can be run in RStudio (developed using R version 4.3.1). 
 
-## 2. Run code
+## 2. For local sites there are 2 initial scripts to run
 Can run both scripts as R markdown files with the 'knit' function in R
-1. Run 00_cohort_identification_prone_incidence_wCovid.Rmd script to define the ARF cohort. 
-2. Run analysis script: 01_CLIF_prone_incidence_analysis_wCOVID.Rmd to perform analysis and generate output. 
+1. Run local cohort identification script: 00_local_CLIF_prone_incidence_cohort_identification_wCOVID.Rmd script to define the ARF cohort. 
+2. Run local analysis script: local analysis script: 01_local_CLIF_prone_incidence_analysis_wCOVID.Rmd to perform analysis and generate output. 
 
-## 3. Upload results from the project_output (tables and graphs) to the UChicago Box Folder. 
+## 3. Upload summary results from the project_output (tables and graphs) to the UChicago Box Folder. 
 
-## 4. Await global coefficicents
-**The investigators plan to calculate global fixed effects coefficients and will send a short third analytic file to extract fixed effects adjustment for a mixed effect model attempting to quantify variation betweeen hospitals in proning rates. This will be done in a third step. **
+## 4. Once all participating sites hvae rund scripts 00 and 01, lead investigators generate global coefficients for proning covariates. THEN will ask that each site run a third script to generate risk-adjusted rates of proning by hospital and period. 
+3. Run local proning prediction script with globaly estimated coefficients: 02_local_CLIF_prone_incidence_global_risk_adjustment.Rmd
+
+## 4. Lead Investigators than Run Analytic Scripts to Accomplish Exploratory Data analysis, summary random effects meta-analysis and bayesian hierarchical models. 
+1. 03_summary_CLIF_prone_incidence_allsite_eda.Rmd (generates data for Tables 1 and 2, Figure 1)
+2. 04_summary_CLIF_proning_meta_analysis.R
+3. 05_summary_CLIF_prone_incidence_bayesian_hierarchical.Rmd (generates data for Figure 3)
+
 ---
 
 
