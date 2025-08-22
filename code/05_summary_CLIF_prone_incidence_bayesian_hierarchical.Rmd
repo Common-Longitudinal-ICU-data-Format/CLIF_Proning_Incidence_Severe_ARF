@@ -214,14 +214,14 @@ df_agg <- left_join(df_agg, global_agg_byoutcome_period) |>
 ```
 
 
-```{r Now Bayesian Hierarchical Model Including Hospital Type and Hospital Size}
+```{r Now Bayesian Hierarchical Model Including Hospital Type}
 #Use Methods from Yarnell et al (PMID: 31359459)
 #Bayesian Hierarchial Model with Random Effects for Hospital and Study Period 
 #Also Includes Hospital Type and Hospital Type and Period Interaction
 #ICU Capacity is colinear with academic or community so have taken that out of the model
 
 priors <- c(
-  #Pre-COVID Proning Prior: Weakly Informative Centered Around Prob of Proning of 12% with 95% of prior probability in  5-50% rnage
+  #Pre-COVID Proning Prior: Weakly Informative Centered Around Prob of Proning of 12% with 95% of prior probability in  5-50% range
   prior(normal(-2, 1), class = "b", coef = 'study_periodPreMCOVID'),  
   #COVID Proning Prior: Weakly Informative Centered Around Prob of Proning of 50% in COVID era and with 95% of these probability ranging from 12-88%
   prior(normal(0, 1), class = "b", coef = 'study_periodCOVID'),
@@ -263,12 +263,12 @@ summary_posterior <- data.frame(
   median_or = c(median(full_posterior$pre_covid),
               median(full_posterior$covid),
               median(full_posterior$post_covid)),
-  conf.low = c(quantile(full_posterior$pre_covid, p=0.05),
-               quantile(full_posterior$covid, p=0.05),
-               quantile(full_posterior$post_covid, p=0.05)),
-  conf.high = c(quantile(full_posterior$pre_covid, p=0.95),
-               quantile(full_posterior$covid, p=0.95),
-               quantile(full_posterior$post_covid, p=0.95)))
+  conf.low = c(quantile(full_posterior$pre_covid, p=0.025),
+               quantile(full_posterior$covid, p=0.025),
+               quantile(full_posterior$post_covid, p=0.025)),
+  conf.high = c(quantile(full_posterior$pre_covid, p=0.975),
+               quantile(full_posterior$covid, p=0.975),
+               quantile(full_posterior$post_covid, p=0.975)))
 print(summary_posterior)
 write.csv(summary_posterior, paste0(project_location, '/summary_output/summary_posterior.csv'))
 ```
@@ -591,6 +591,21 @@ mor_pre <- calc_mor(sd_pre)
 mor_covid <- calc_mor(sd_covid)
 mor_post <- calc_mor(sd_post)
 
+# Differences Using The Latter Periods as Reference
+diff_covid_pre <-  mor_covid - mor_pre
+diff_post_pre <- mor_post - mor_pre
+diff_post_covid <- mor_post - mor_covid
+
+# Posterior probabilities that the Difference in mOR is > 0 (Bayesian 'p-values')
+prop_covid_gt_pre <- mean(diff_covid_pre  > 0)
+prop_post_gt_pre  <- mean(diff_post_pre > 0)
+prop_post_gt_covid <- mean(diff_post_covid > 0)
+
+# Credible intervals
+cr_covid_pre <- quantile(diff_covid_pre, c(0.025, 0.5, 0.975))
+cr_post_pre <- quantile(diff_post_pre, c(0.025, 0.5, 0.975))
+cr_post_covid <- quantile(diff_post_covid, c(0.025, 0.5, 0.975))
+
 # Summarize
 mor_summary <- data.frame(
   Period = c("Pre-MCOVID", "COVID", "Post-MCOVID"),
@@ -601,6 +616,17 @@ mor_summary <- data.frame(
 )
 
 print(mor_summary)
+
+#Summarize the Differences in Median Odds Ratios by Period
+diff_mor <- data.frame(
+  contrast = c('COVID-Pre', 'Post-COVID', 'Post-Pre'),
+  MOR_diff_mean = c(mean(diff_covid_pre), mean(diff_post_covid), mean(diff_post_pre)),
+  MOR_diff_median = c(median(diff_covid_pre), median(diff_post_covid), median(diff_post_pre)),
+  MOR_diff_2.5 = c(quantile(diff_covid_pre, 0.025), quantile(diff_post_covid, 0.025), quantile(diff_post_pre, 0.025)),
+  MOR_diff_97.5 = c(quantile(diff_covid_pre, 0.975), quantile(diff_post_covid, 0.975), quantile(diff_post_pre, 0.975)),
+  prob_diff_gt_0 = c(prop_covid_gt_pre, prop_post_gt_covid, prop_post_gt_pre)
+)
+print(diff_mor)
 
 #Visualize
 mor_df <- data.frame(
@@ -761,6 +787,60 @@ or <- exp(delta_post_covid_period)
 posterior_summary <- quantile(or, probs = c(0.5, 0.025, 0.975))
 cat('\nOdds Ratio and 95 Credible Interview for SARS-CoV2 Neg in COVID vs Pre-COVID \n', posterior_summary)
 ```
+```{r Bayesian Hiearachical Model Examining Association of Hospital ICU Capacity And Proning Probability}
+#ICU bed capacity Not Included as an additional covariable (in addition to hospital type becaues of co-linearity)
+#Bayesian Hierarchial Model with Random Effects for Hospital and Study Period 
+#ICU Capacity is colinear with academic or community so have taken that out of the model
+
+priors <- c(
+  #Pre-COVID Proning Prior: Weakly Informative Centered Around Prob of Proning of 12% with 95% of prior probability in  5-50% range
+  prior(normal(-2, 1), class = "b", coef = 'study_periodPreMCOVID'),  
+  #COVID Proning Prior: Weakly Informative Centered Around Prob of Proning of 50% in COVID era and with 95% of these probability ranging from 12-88%
+  prior(normal(0, 1), class = "b", coef = 'study_periodCOVID'),
+  #Post-COVID Proning Prior: Weakly Informative Centered Around Prob of Proning of 12% in COVID era and with 95% of these probability ranging from 5-50%
+  prior(normal(-2, 1), class = "b", coef = 'study_periodPostMCOVID'), 
+  #Flat Priors for Hospital Size
+  prior(normal(0,1), class = "b", coef = 'icu_bed_catlarge'),
+  prior(normal(0,1), class = "b", coef = 'icu_bed_catmedium'),
+  #Half Normal Weakly Informative but Regularizing Prior for Random Effects
+  prior(normal(0,1), class = "sd"))         
+
+#Bayesian Hierarchical Model with varying slopes by study_period and allowing for interaction term between hospital type and period
+agg_brm_period_size <- brm(
+  bf(observed_prone | trials(n_patients) ~ 
+       0 + offset(prone_log_odds) + study_period + icu_bed_cat +
+     (0 + study_period | hospital_id)), 
+  data = df_agg,
+  family = binomial,
+  prior = priors, 
+  cores = 4,
+  control = list(adapt_delta = 0.99)
+)
+
+# Examine model fit and summaries
+plot(agg_brm_period_size)
+summary(agg_brm_period_size)
+
+#Now Generate Odds Ratios for Hospital Size Contrasts
+full_posterior <- as_draws_df(agg_brm_period_size)  |>
+  mutate(medium_v_small = exp(b_icu_bed_catmedium ),
+         large_v_small = exp(b_icu_bed_catlarge))
+
+summary_posterior_size <- data.frame(
+  variable = c(
+    'Medium vs Small ICU Capacity',
+    'Large vs Small ICU Capacity'
+  ),
+  median_or = c(median(full_posterior$medium_v_small),
+              median(full_posterior$large_v_small)),
+  conf.low = c(quantile(full_posterior$medium_v_small, p=0.025),
+               quantile(full_posterior$large_v_small, p=0.025)),
+  conf.high = c(quantile(full_posterior$medium_v_small, p=0.975),
+               quantile(full_posterior$large_v_small, p=0.975)))
+print(summary_posterior_size)
+write.csv(summary_posterior_size, paste0(project_location, '/summary_output/summary_posterior_size_analysis.csv'))
+
+```
 
 
 ```{r Bayesian Hierarchical Models as Sensitivity for Primary Analysis}
@@ -799,25 +879,30 @@ sensitivity_posterior <- as_draws_df(agg_brm_period_strat) |>
   mutate(covid_v_pre_covid=exp(b_study_periodCOVID-b_study_periodPreMCOVID),
          covid_v_post_covid=exp(b_study_periodCOVID-b_study_periodPostMCOVID),
          pre_covid_v_covid=exp(b_study_periodPreMCOVID-b_study_periodCOVID),
-         post_covid_v_covid=exp(b_study_periodPostMCOVID-b_study_periodCOVID))
+         post_covid_v_covid=exp(b_study_periodPostMCOVID-b_study_periodCOVID),
+         post_covid_v_precovid=exp(b_study_periodPostMCOVID-b_study_periodPreMCOVID))
 
 sensitivity_table <- data.frame(
   variable = c('COVID_v_Pre-COVID',
                'COVID_v_Post-COVID',
                'Pre-COVID_v_COVID',
-               'Post-COVID_v_COVID'),
+               'Post-COVID_v_COVID',
+               'Post-COVID_v_Pre-COVID'),
   or = c(median(sensitivity_posterior$covid_v_pre_covid),
          median(sensitivity_posterior$covid_v_post_covid),
          median(sensitivity_posterior$pre_covid_v_covid),
-         median(sensitivity_posterior$post_covid_v_covid)),
-  conf.low=c(quantile(sensitivity_posterior$covid_v_pre_covid, p=0.05),
-         quantile(sensitivity_posterior$covid_v_post_covid, p=0.05),
-         quantile(sensitivity_posterior$pre_covid_v_covid, p=0.05),
-         quantile(sensitivity_posterior$post_covid_v_covid, p=0.05)),
-  conf.high=c(quantile(sensitivity_posterior$covid_v_pre_covid, p=0.95),
-         quantile(sensitivity_posterior$covid_v_post_covid, p=0.95),
-         quantile(sensitivity_posterior$pre_covid_v_covid, p=0.95),
-         quantile(sensitivity_posterior$post_covid_v_covid, p=0.95)))
-print(sensitivity_table)
+         median(sensitivity_posterior$post_covid_v_covid),
+         median(sensitivity_posterior$post_covid_v_precovid)),
+  conf.low=c(quantile(sensitivity_posterior$covid_v_pre_covid, p=0.025),
+         quantile(sensitivity_posterior$covid_v_post_covid, p=0.025),
+         quantile(sensitivity_posterior$pre_covid_v_covid, p=0.025),
+         quantile(sensitivity_posterior$post_covid_v_covid, p=0.025),
+         quantile(sensitivity_posterior$post_covid_v_precovid, p=0.025)),
+  conf.high=c(quantile(sensitivity_posterior$covid_v_pre_covid, p=0.975),
+         quantile(sensitivity_posterior$covid_v_post_covid, p=0.975),
+         quantile(sensitivity_posterior$pre_covid_v_covid, p=0.975),
+         quantile(sensitivity_posterior$post_covid_v_covid, p=0.975),
+         quantile(sensitivity_posterior$post_covid_v_precovid, p=0.975)))
+sensitivity_table
 write.csv(sensitivity_table, paste0(project_location, '/summary_output/sensitivity_table.csv'))
 ```
