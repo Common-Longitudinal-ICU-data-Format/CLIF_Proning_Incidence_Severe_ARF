@@ -10,22 +10,24 @@ setwd("z:/barker/ATS abstract scripts") #location of csv files
 #COVID vs pre-COVID periods
 meta<- read.csv("meta_analysis_primary_6_25.csv") #csv file with health system level results of outcomes (n, estimate, standard error)
 meta_pre<- meta %>% filter(is.na(preCOVID_COVID_compare12)==F) #only run analysis on hospitals with COVID and post-COVID data
-res<- rma(yi=meta_pre$preCOVID_COVID_compare12, sei=meta_pre$preCOVID_COVID_compare12se, method = "REML")
+study.ids<- c("1", "2", "3", "4", "5", "6", "7")
+res<- rma(yi=meta_pre$preCOVID_COVID_compare12, sei=meta_pre$preCOVID_COVID_compare12se, method = "REML", slab=study.ids)
 summary(res)
-meta1<- metagen(meta_pre$preCOVID_COVID_compare12 , meta_pre$preCOVID_COVID_compare12se , common=F, random=T, method.tau = "REML", sm="OR")
-forest(meta1, layout = "JAMA", backtransf = TRUE)
-grid.text("Favor Pre-Pandemic", x=.525, y=.8, gp=gpar(fontsize=10, fontface="bold"))
-grid.text("Favor Pandemic", x=.7, y=.8, gp=gpar(fontsize=10, fontface="bold"))
+meta1<- metagen(meta_pre$preCOVID_COVID_compare12 , meta_pre$preCOVID_COVID_compare12se , common=F, random=T, method.tau = "REML", sm="OR", studlab = study.ids)
+forest(meta1, layout = "JAMA", backtransf = TRUE, names=study.ids)
+grid.text("Favor Pre-Pandemic", x=.535, y=.8, gp=gpar(fontsize=10, fontface="bold"))
+grid.text("Favor Pandemic", x=.73, y=.8, gp=gpar(fontsize=10, fontface="bold"))
 
 #COVID vs post-COVID periods
 meta_post<- meta %>% filter(is.na(postCOVID_COVID_compare12)==F) #only run analysis on hospitals with COVID and post-COVID data
-res<- rma(yi=meta_post$postCOVID_COVID_compare12, sei=meta_post$postCOVID_COVID_compare12se, method = "REML")
+study.ids<- c("1", "2", "3", "4", "5", "6", "8", "9")
+res<- rma(yi=meta_post$postCOVID_COVID_compare12, sei=meta_post$postCOVID_COVID_compare12se, method = "REML", slab=study.ids)
 summary(res)
-meta1<- metagen(TE=meta_post$postCOVID_COVID_compare12 , seTE=meta_post$postCOVID_COVID_compare12se , common=F, random=T, method.tau = "REML", sm="OR")
-forest(meta1, layout = "JAMA", backtransf = TRUE)
-grid.text("Favor Post-Pandemic", x=.525, y=.68, gp=gpar(fontsize=10, fontface="bold"))
-grid.text("Favor Pandemic", x=.75, y=.68, gp=gpar(fontsize=10, fontface="bold"))
- 
+meta1<- metagen(TE=meta_post$postCOVID_COVID_compare12 , seTE=meta_post$postCOVID_COVID_compare12se , common=F, random=T, method.tau = "REML", sm="OR", studlab = study.ids)
+forest(meta1, layout = "JAMA", backtransf = TRUE, names=study.ids)
+grid.text("Favor Post-Pandemic", x=.535, y=.83, gp=gpar(fontsize=10, fontface="bold"))
+grid.text("Favor Pandemic", x=.73, y=.83, gp=gpar(fontsize=10, fontface="bold"))
+
 #12h proning; 4 categories: ref group non-SARS-CoV2 positive, during COVID period
 #COVID - vs pre-COVID
 meta_pre<- meta %>% filter(is.na(preCOVID_COVID_compare12)==F)

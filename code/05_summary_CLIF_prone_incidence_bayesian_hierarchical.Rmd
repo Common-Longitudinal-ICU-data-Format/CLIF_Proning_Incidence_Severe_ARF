@@ -16,7 +16,9 @@ if (!dir.exists(paste0(project_location, "/summary_analysis"))) {
   dir.create(paste0(project_location, "/summary_analysis"))
 }
 
-set.seed(3221984)
+set.seed(32284)
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE, cache = T) 
+
 ```
 
 
@@ -221,6 +223,7 @@ df_agg <- left_join(df_agg, global_agg_byoutcome_period) |>
 #Bayesian Hierarchial Model with Random Effects for Hospital and Study Period 
 #Also Includes Hospital Type and Hospital Type and Period Interaction
 #ICU Capacity is colinear with academic or community so have taken that out of the model
+set.seed(3)
 
 priors <- c(
   #Pre-COVID Proning Prior: Weakly Informative Centered Around Prob of Proning of 12% with 95% of prior probability in  5-50% range
@@ -277,6 +280,8 @@ write.csv(summary_posterior, paste0(project_location, '/summary_output/summary_p
 
 ```{r Caterpillar Plots Based on Full Adjustment (Including Hospital Type and Size)}
 ####Predictions Command from Marginal Effects with 4000 posterior draws
+set.seed(4)
+
 reliability_adjust_full <- predictions(agg_brm_period_full, 
                                   type = 'response', ndraws=4000, re_formula =  ~ (0 + study_period | hospital_id))
 reliability_adjust_full <- as_tibble(reliability_adjust_full) |>
@@ -539,8 +544,8 @@ stacked_data <- stacked_data |>
 stacked3 <- ggplot(stacked_data, 
                    aes(x = hospital_rank,
                        y = adjust_rate)) +
-  geom_line(aes(x = hospital_rank,
-                y = adjust_rate, group=study_period, alpha=period_n),  color = 'black') +
+  #geom_line(aes(x = hospital_rank,
+  #              y = adjust_rate, group=study_period, alpha=period_n),  color = 'black') +
   geom_linerange(aes(ymin = ci_low, ymax = ci_hi, color= Hospital_Type), linewidth=0.75, alpha = 0.4) + scale_alpha(guide="none")+
   geom_point(aes(color=Hospital_Type, shape=study_period), size = 2.25) +  # Add points for center effects
   scale_x_continuous(
@@ -575,6 +580,8 @@ ggsave('stacked_caterpillar3.pdf',
 ```
 
 ```{r Median Odds Ratio from Fully Adjusted Model}
+set.seed(5)
+
 posterior <- as_draws_df(agg_brm_period_full)
 
 # Extract the standard deviations (SDs) for each study_period random effect
@@ -654,6 +661,8 @@ ggsave('mor_distribution_fully.pdf',
 ```{r COVID Status}
 #Bayesian Hierarchial Model with Random Effects for Hospital and Study Period 
 #Adjusted for COVID Status
+set.seed(6)
+
 
 #First Prepare Dataset
 #Open Aggregate Data with COVID
@@ -730,7 +739,7 @@ df_agg_covid <- left_join(df_agg_covid, global_agg_byoutcome_period) |>
 
 
 ```{r COVID Status Model}
-set.seed(32284)
+set.seed(7)
 
 priors <- c(
   #Pre-COVID Proning Prior: Weakly Informative Centered Around Prob of Proning of 12% with 95% of prior probability in  5-50% rnage
@@ -810,7 +819,7 @@ priors <- c(
 #Bayesian Hierarchical Model with varying slopes by study_period and allowing for interaction term between hospital type and period
 agg_brm_period_size <- brm(
   bf(observed_prone | trials(n_patients) ~ 
-       0 + offset(prone_log_odds) + study_period + icu_bed_cat +
+       0 + offset(prone_log_odds) + study_period + study_period * icu_bed_cat +
      (0 + study_period | hospital_id)), 
   data = df_agg,
   family = binomial,
@@ -825,20 +834,40 @@ summary(agg_brm_period_size)
 
 #Now Generate Odds Ratios for Hospital Size Contrasts
 full_posterior <- as_draws_df(agg_brm_period_size)  |>
-  mutate(medium_v_small = exp(b_icu_bed_catmedium ),
-         large_v_small = exp(b_icu_bed_catlarge))
+  mutate(pre_covid_med = exp(b_icu_bed_catmedium + `b_study_periodPreMCOVID:icu_bed_catmedium`), 
+           pre_covid_large = exp(b_icu_bed_catlarge + `b_study_periodPreMCOVID:icu_bed_catlarge`),
+         covid_med = exp(b_icu_bed_catmedium),
+         covid_large = exp(b_icu_bed_catlarge),
+      post_covid_med = exp(b_icu_bed_catmedium + `b_study_periodPostMCOVID:icu_bed_catmedium`),
+      post_covid_large = exp(b_icu_bed_catlarge + `b_study_periodPostMCOVID:icu_bed_catlarge`))
 
 summary_posterior_size <- data.frame(
   variable = c(
-    'Medium vs Small ICU Capacity',
-    'Large vs Small ICU Capacity'
+    'Pre_Covid Medium vs Small ICU Capacity',
+    'Pre_Covid Large vs Small ICU Capacity',
+    'Covid Medium vs Small ICU Capacity',
+    'Covid Large vs Small ICU Capacity',
+    'Post_Covid Medium vs Small ICU Capacity',
+    'Post_Covid Large vs Small ICU Capacity'
   ),
-  median_or = c(median(full_posterior$medium_v_small),
-              median(full_posterior$large_v_small)),
-  conf.low = c(quantile(full_posterior$medium_v_small, p=0.025),
-               quantile(full_posterior$large_v_small, p=0.025)),
-  conf.high = c(quantile(full_posterior$medium_v_small, p=0.975),
-               quantile(full_posterior$large_v_small, p=0.975)))
+  median_or = c(median(full_posterior$pre_covid_med),
+              median(full_posterior$pre_covid_large),
+              median(full_posterior$covid_med),
+              median(full_posterior$covid_large),
+              median(full_posterior$post_covid_med),
+              median(full_posterior$post_covid_large)),
+  conf.low = c(quantile(full_posterior$pre_covid_med, p=0.025),
+               quantile(full_posterior$pre_covid_large, p=0.025),
+               quantile(full_posterior$covid_med, p=0.025),
+               quantile(full_posterior$covid_large, p=0.025),
+               quantile(full_posterior$post_covid_med, p=0.025),
+               quantile(full_posterior$post_covid_large, p=0.025)),
+  conf.high = c(quantile(full_posterior$pre_covid_med, p=0.975),
+               quantile(full_posterior$pre_covid_large, p=0.975),
+               quantile(full_posterior$covid_med, p=0.975),
+               quantile(full_posterior$covid_large, p=0.975),
+               quantile(full_posterior$post_covid_med, p=0.975),
+               quantile(full_posterior$post_covid_large, p=0.975)))
 print(summary_posterior_size)
 write.csv(summary_posterior_size, paste0(project_location, '/summary_output/summary_posterior_size_analysis.csv'))
 
@@ -848,8 +877,7 @@ write.csv(summary_posterior_size, paste0(project_location, '/summary_output/summ
 ```{r Bayesian Hierarchical Models as Sensitivity for Primary Analysis}
 #Use Methods from Yarnell et al (PMID: 31359459)
 #Bayesian Hierarchial Model with Random Effects for Hospital and Study Period 
-
-set.seed(32284)
+set.seed(8)
 
 priors <- c(
   #Pre-COVID Proning Prior: Weakly Informative Centered Around Prob of Proning of 12% with 95% of prior probability in  5-50% rnage
