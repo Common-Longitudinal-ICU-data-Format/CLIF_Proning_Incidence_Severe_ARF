@@ -10,9 +10,9 @@ output: html_document
 ```{r}
 
 site_time_zone <-"America/New_York" #Add your local time zone prior to UTC conversion, options for this Analysis are EST = 'America/New_York', CST = 'America/Chicago', PST = 'America/Los_Angeles' 
-tables_location <-"Z:/barker/clif_3_22/CLIF-2.0.0-dttm-update-R" #Add local path to CLIF tables
-project_location <-"Z:/barker/clif_3_22/" #Add local path to project location, where results will output
-site <-"Michigan" #Add local site name
+tables_location <-"/projects/CLIF-analysis/critill_rclif_2_1/critill_rclif_2_1_tables" #Add local path to CLIF tables
+project_location <-"/projects/CLIF-analysis/clif_projects/CLIF_Prone_Parent/CLIF_Proning_Incidence_Severe_ARF" #Add local path to project location, where results will output
+site <-"Hopkins" #Add local site name
 file_type <-"parquet" #Options are "parquet" or "csv"
 
 check_timezone <- function(site_timezone, intended_timezone = Sys.timezone()) {
@@ -1383,11 +1383,11 @@ sofa_cr <- clif_labs |>
 sars_cov2 <- clif_microbiology_nonculture |>
   filter(patient_id %in% cohort_times$patient_id) |>
   select(-hospitalization_id) |> #Want to Merge on Patient Level
-  filter(micro_category %in% c('sars_cov2_pcr', 'sars_cov2_antigen', 'sars_cov2_na')) |>
+  filter(organism_category %in% c('sars_cov2')) |>
   left_join(cohort_hospitalization_ids) |> #Merges in Encounter Block
   left_join(cohort_times) |>
   collect() |>
-  filter(lab_collect_dttm<=t_enrollment & lab_collect_dttm>=t_enrollment-dweeks(4)) |>
+  filter(collect_dttm<=t_enrollment & collect_dttm>=t_enrollment-dweeks(4)) |>
   group_by(patient_id, encounter_block) |>
   mutate(sars_cov2_positive=fifelse(
     sum(tolower(result_category)=='detected', na.rm=TRUE)>=1, 1, 0)) |>
@@ -1425,7 +1425,7 @@ prone_analytic_data <- hospitalization_vars |>
     tolower(race_category)=="white" & 
       tolower(ethnicity_category) %in% c('non-hispanic'), 'White, non-Hispanic',
     tolower(ethnicity_category)=='hispanic', 'Hispanic',
-    tolower(race_category)=='black or african american' & 
+    tolower(race_category) %in% c('black or african american', 'black or african-american') & 
       tolower(ethnicity_category) %in% c('non-hispanic'), 'Black, non-Hispanic',
     tolower(race_category)=='asian', 'Asian',
     tolower(race_category) %!in% c('white', 'black or african american', 'asian', 'unknown'), 'other',

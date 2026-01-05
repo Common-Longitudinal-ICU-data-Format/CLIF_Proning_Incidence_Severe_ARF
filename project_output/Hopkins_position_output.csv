@@ -1,0 +1,145 @@
+position_category,position_name,Freq,semi_prone
+prone,Head left;Lying left side;Pillow support;Prone;Reverse Trendelenburg,15,FALSE
+prone,Head left;Lying left side;Prone,18,FALSE
+prone,Head left;Lying left side;Prone;Reverse Trendelenburg,39,FALSE
+prone,Head left;Lying right side;Pillow support;Prone;Reverse Trendelenburg,34,FALSE
+prone,Head left;Lying right side;Prone,25,FALSE
+prone,Head left;Lying right side;Prone;Reverse Trendelenburg,123,FALSE
+prone,Head left;Lying right side;Prone;Reverse Trendelenburg;Pillow support,15,FALSE
+prone,Head left;Lying right side;Reverse Trendelenburg;Prone,13,FALSE
+prone,Head left;Pillow support;Prone,12,FALSE
+prone,Head left;Pillow support;Prone;Reverse Trendelenburg,131,FALSE
+prone,Head left;Prone,183,FALSE
+prone,Head left;Prone;Lying right side,12,FALSE
+prone,Head left;Prone;Pillow support,21,FALSE
+prone,Head left;Prone;Pillow support;Reverse Trendelenburg,21,FALSE
+prone,Head left;Prone;Reverse Trendelenburg,302,FALSE
+prone,Head left;Prone;Reverse Trendelenburg;Pillow support,40,FALSE
+prone,Head left;Reverse Trendelenburg;Prone,19,FALSE
+prone,Head right;Lying left side;Pillow support;Prone;Reverse Trendelenburg,41,FALSE
+prone,Head right;Lying left side;Prone,21,FALSE
+prone,Head right;Lying left side;Prone;Reverse Trendelenburg,126,FALSE
+prone,Head right;Lying left side;Prone;Reverse Trendelenburg;Pillow support,11,FALSE
+prone,Head right;Lying left side;Reverse Trendelenburg;Prone,12,FALSE
+prone,Head right;Lying right side;Pillow support;Prone,14,FALSE
+prone,Head right;Lying right side;Pillow support;Prone;Reverse Trendelenburg,15,FALSE
+prone,Head right;Lying right side;Prone,15,FALSE
+prone,Head right;Lying right side;Prone;Reverse Trendelenburg,42,FALSE
+prone,Head right;Pillow support;Prone,11,FALSE
+prone,Head right;Pillow support;Prone;Reverse Trendelenburg,124,FALSE
+prone,Head right;Pillow support;Reverse Trendelenburg;Prone,11,FALSE
+prone,Head right;Prone,202,FALSE
+prone,Head right;Prone;Lying left side,15,FALSE
+prone,Head right;Prone;Pillow support,22,FALSE
+prone,Head right;Prone;Pillow support;Reverse Trendelenburg,26,FALSE
+prone,Head right;Prone;Reverse Trendelenburg,292,FALSE
+prone,Head right;Prone;Reverse Trendelenburg;Lying left side,15,FALSE
+prone,Head right;Prone;Reverse Trendelenburg;Pillow support,46,FALSE
+prone,Head right;Reverse Trendelenburg;Prone,18,FALSE
+prone,Lying left side;Head right;Prone;Reverse Trendelenburg,31,FALSE
+prone,Lying left side;Pillow support;Prone,42,FALSE
+prone,Lying left side;Prone,459,FALSE
+prone,Lying left side;Prone;Other (Comment),12,FALSE
+prone,Lying left side;Prone;Pillow support,45,FALSE
+prone,Lying left side;Prone;Reverse Trendelenburg,99,FALSE
+prone,Lying left side;Reverse Trendelenburg;Prone,13,FALSE
+prone,Lying right side;Head left;Prone;Reverse Trendelenburg,23,FALSE
+prone,Lying right side;Pillow support;Prone,40,FALSE
+prone,Lying right side;Pillow support;Prone;Reverse Trendelenburg,13,FALSE
+prone,Lying right side;Prone,479,FALSE
+prone,Lying right side;Prone;Pillow support,42,FALSE
+prone,Lying right side;Prone;Reverse Trendelenburg,81,FALSE
+prone,Lying right side;Reverse Trendelenburg;Prone,20,FALSE
+prone,Other (Comment);Prone,11,FALSE
+prone,Pillow support;Prone,559,FALSE
+prone,Pillow support;Prone;Lying right side,17,FALSE
+prone,Pillow support;Prone;Reverse Trendelenburg,157,FALSE
+prone,Pillow support;Prone;Reverse Trendelenburg;Head left,16,FALSE
+prone,Pillow support;Prone;Reverse Trendelenburg;Head right,11,FALSE
+prone,Pillow support;Reverse Trendelenburg;Prone,14,FALSE
+prone,prone,15,FALSE
+prone,Prone,4422,FALSE
+prone,PRONE,26,FALSE
+prone,prone head repositioned,12,FALSE
+prone,PRONE head repositioned,62,FALSE
+prone,PRONE HEAD REPOSITIONED,25,FALSE
+prone,prone head turn,27,FALSE
+prone,prone turn,14,FALSE
+prone,"PRONE, head repositioned",12,FALSE
+prone,Prone;Head left,456,FALSE
+prone,Prone;Head left;Lying left side,22,FALSE
+prone,Prone;Head left;Lying right side,65,FALSE
+prone,Prone;Head left;Lying right side;Reverse Trendelenburg,33,FALSE
+prone,Prone;Head left;Pillow support,23,FALSE
+prone,Prone;Head left;Reverse Trendelenburg,88,FALSE
+prone,Prone;Head right,469,FALSE
+prone,Prone;Head right;Lying left side,56,FALSE
+prone,Prone;Head right;Lying left side;Reverse Trendelenburg,24,FALSE
+prone,Prone;Head right;Lying right side,21,FALSE
+prone,Prone;Head right;Pillow support,25,FALSE
+prone,Prone;Head right;Pillow support;Reverse Trendelenburg,14,FALSE
+prone,Prone;Head right;Reverse Trendelenburg,76,FALSE
+prone,Prone;Head right;Reverse Trendelenburg;Pillow support,14,FALSE
+prone,Prone;Lying left side,1513,FALSE
+prone,Prone;Lying left side;Head left,27,FALSE
+prone,Prone;Lying left side;Head right,82,FALSE
+prone,Prone;Lying left side;Head right;Reverse Trendelenburg,45,FALSE
+prone,Prone;Lying left side;Other (Comment),38,FALSE
+prone,Prone;Lying left side;Pillow support,128,FALSE
+prone,Prone;Lying left side;Pillow support;Reverse Trendelenburg,14,FALSE
+prone,Prone;Lying left side;Reverse Trendelenburg,65,FALSE
+prone,Prone;Lying right side,1512,FALSE
+prone,Prone;Lying right side;Head left,81,FALSE
+prone,Prone;Lying right side;Head left;Reverse Trendelenburg,45,FALSE
+prone,Prone;Lying right side;Head right,20,FALSE
+prone,Prone;Lying right side;Other (Comment),22,FALSE
+prone,Prone;Lying right side;Pillow support,141,FALSE
+prone,Prone;Lying right side;Reverse Trendelenburg,77,FALSE
+prone,Prone;Other (Comment),126,FALSE
+prone,Prone;Pillow support,1315,FALSE
+prone,Prone;Pillow support;Head left,34,FALSE
+prone,Prone;Pillow support;Head right,29,FALSE
+prone,Prone;Pillow support;Lying left side,57,FALSE
+prone,Prone;Pillow support;Lying right side,45,FALSE
+prone,Prone;Pillow support;Lying right side;Head left,12,FALSE
+prone,Prone;Pillow support;Other (Comment),38,FALSE
+prone,Prone;Pillow support;Reverse Trendelenburg,143,FALSE
+prone,Prone;Pillow support;Reverse Trendelenburg;Head left,14,FALSE
+prone,Prone;Pillow support;Reverse Trendelenburg;Head right,19,FALSE
+prone,Prone;Reverse Trendelenburg,1031,FALSE
+prone,Prone;Reverse Trendelenburg;Head left,158,FALSE
+prone,Prone;Reverse Trendelenburg;Head left;Lying right side,22,FALSE
+prone,Prone;Reverse Trendelenburg;Head left;Pillow support,12,FALSE
+prone,Prone;Reverse Trendelenburg;Head right,156,FALSE
+prone,Prone;Reverse Trendelenburg;Head right;Lying left side,16,FALSE
+prone,Prone;Reverse Trendelenburg;Head right;Pillow support,15,FALSE
+prone,Prone;Reverse Trendelenburg;Lying left side,68,FALSE
+prone,Prone;Reverse Trendelenburg;Lying left side;Head left,11,FALSE
+prone,Prone;Reverse Trendelenburg;Lying left side;Head right,32,FALSE
+prone,Prone;Reverse Trendelenburg;Lying right side,75,FALSE
+prone,Prone;Reverse Trendelenburg;Lying right side;Head left,27,FALSE
+prone,Prone;Reverse Trendelenburg;Other (Comment),15,FALSE
+prone,Prone;Reverse Trendelenburg;Pillow support,251,FALSE
+prone,Prone;Reverse Trendelenburg;Pillow support;Head left,37,FALSE
+prone,Prone;Reverse Trendelenburg;Pillow support;Head left;Lying right side,13,FALSE
+prone,Prone;Reverse Trendelenburg;Pillow support;Head right,34,FALSE
+prone,Prone;Reverse Trendelenburg;Pillow support;Head right;Lying left side,12,FALSE
+prone,Prone;Trendelenburg,19,FALSE
+prone,Prone;Turns self,101,FALSE
+prone,Prone;Unable to reposition,25,FALSE
+prone,proned,30,FALSE
+prone,Proned,34,FALSE
+prone,PRONED,20,FALSE
+prone,pt proned,30,FALSE
+prone,Pt proned,21,FALSE
+prone,Reverse Trendelenburg;Pillow support;Prone,12,FALSE
+prone,Reverse Trendelenburg;Prone,102,FALSE
+prone,Reverse Trendelenburg;Prone;Head left,11,FALSE
+prone,Reverse Trendelenburg;Prone;Head right,11,FALSE
+prone,Reverse Trendelenburg;Prone;Other (Comment),20,FALSE
+prone,Reverse Trendelenburg;Prone;Pillow support,43,FALSE
+prone,Reverse Trendelenburg;Prone;Pillow support;Head left,11,FALSE
+prone,Reverse Trendelenburg;Prone;Pillow support;Head right,14,FALSE
+prone,Turns self;Prone,203,FALSE
+prone,Turns self;Prone;Pillow support,14,FALSE
+prone,Unable to reposition;Prone,19,FALSE
