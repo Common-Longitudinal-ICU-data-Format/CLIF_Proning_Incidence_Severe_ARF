@@ -28,6 +28,6 @@ initialize_renv.R
 *.RData
 
 # ignore proj_output and proj_tables
-proj_output/
-proj_tables/
+project_output/
+project_tables/
 
