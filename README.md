@@ -58,7 +58,8 @@ i. If a patient’s first ADT observation is not the ED (location_category!=’E
 
 ## Detailed Instructions for running the project
 
-## 1. Setup Project Environment
+## 1. Update config_tempate.yaml to conflig.yaml to reflect local details
+Required elements are: clif_data_path project_path file_type
 All Packages are coded into the cohort_identification and analysis scripts and can be run in RStudio (developed using R version 4.3.1). 
 
 ## 2. For local sites there are 2 initial scripts to run
