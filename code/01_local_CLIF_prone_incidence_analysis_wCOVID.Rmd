@@ -111,12 +111,32 @@ fn.timezone_tolocal <- function(df) {
 
 
 ```{r Load Site-specific analytic data set and Convert to Local Time Zone}
-#NOTE: This Table is Created by the 
-prone_analytic_df <- open_dataset(paste0(project_location, '/project_tables/prone_analytic_data.parquet')) 
+# Define the cast function to convert large_string to string (if needed)
+cast_large_utf8_to_utf8 <- function(x) {
+  # Only applies to Arrow objects that have a schema()
+  sch <- arrow::schema(x)
+
+  large_cols <- vapply(
+    sch$fields,
+    function(f) f$type$ToString() %in% c("large_string", "large_utf8"),
+    logical(1)
+  )
+
+  cols_to_cast <- sch$names[large_cols]
+  if (length(cols_to_cast) == 0) return(x)
+
+  x %>% mutate(across(all_of(cols_to_cast), ~ arrow::cast(.x, arrow::utf8())))
+}
+
+#NOTE: This Table is Created by the
+prone_analytic_df <- open_dataset(paste0(project_location, '/project_tables/prone_analytic_data.parquet'))
+
+# Apply cast function to normalize Arrow string types
+prone_analytic_df <- cast_large_utf8_to_utf8(prone_analytic_df)
 
 #Apply Function to Convert to Local Timezone
 prone_analytic_df <- fn.timezone_tolocal(prone_analytic_df)
-  
+
 #Bring Into R Environment as Dataframe
 prone_analytic_df <- prone_analytic_df |> collect()
 ```
