@@ -7,13 +7,49 @@ output: html_document
 #Last File to Be Run; Only Run Once Anna and Chad Have Collated Prior Fixed Effects And Distributed Global Estimates
 #Specify File Paths, Project Path and Site - SITE SPECIFIC
 #Load the Analytic File
-```{r}
-#Add your local time zone prior to UTC conversion, options for this Analysis are EST = 'America/New_York', CST = 'America/Chicago', PST = 'America/Los_Angeles' 
-site_time_zone <- 'America/New_York'
-tables_location <-"Z:/barker/clif_3_22/CLIF-2.0.0-dttm-update-R"
-project_location <-"Z:/barker/clif_3_22/"
-site <- "Michigan"
-file_type <- "parquet"
+```{r setup, include=FALSE}
+packages <- c("lubridate", 
+              "tidyverse", 
+              "readr", 
+              "arrow", 
+              "collapse", 
+              "data.table") #Predictions and Average Slopes for Average Marginal Effects
+
+install_if_missing <- function(package) {
+  if (!require(package, character.only = TRUE)) {
+    install.packages(package, dependencies = TRUE)
+    library(package, character.only = TRUE)
+  }
+}
+
+sapply(packages, install_if_missing)
+rm(packages, install_if_missing)
+
+#Use Dplyr select as default
+select <- dplyr::select
+
+#Set Working Director as the Project Root
+project_root <- file.path( find_root(rprojroot::has_dir("CLIF_Proning_Incidence_Severe_ARF")),
+  "CLIF_Proning_Incidence_Severe_ARF")
+knitr::opts_knit$set(root.dir = project_root)
+getwd()
+
+
+#Use Dplyr select as default
+select <- dplyr::select
+
+#Load Config and Setting
+config = yaml::read_yaml(paste0(project_root, '/config/config.yaml'))
+
+### user entered site details ---------------------------------------------------
+site             = tolower(config$site)
+file_type        = tolower(config$file_type)  
+tables_location  = config$clif_data_path 
+project_location = config$project_location
+site_time_zone = config$site_time_zone
+
+
+setwd(project_location)
 
 check_timezone <- function(site_timezone, intended_timezone = Sys.timezone()) {
   if (site_timezone != intended_timezone) {
@@ -41,27 +77,7 @@ result <- check_timezone(site_time_zone)
 ```
 
 
-```{r Load Needed Libraries, include=FALSE}
-packages <- c("lubridate", 
-              "tidyverse", 
-              "readr", 
-              "arrow", 
-              "collapse", 
-              "data.table") #Predictions and Average Slopes for Average Marginal Effects
-
-install_if_missing <- function(package) {
-  if (!require(package, character.only = TRUE)) {
-    install.packages(package, dependencies = TRUE)
-    library(package, character.only = TRUE)
-  }
-}
-
-sapply(packages, install_if_missing)
-rm(packages, install_if_missing)
-
-#Use Dplyr select as default
-select <- dplyr::select
-
+```{r Make Sure Output Folders Available}
 #Create Sub Folders for Graphs within Project Output Folder
 # Check if the output directory exists; if not, create it
 if (!dir.exists(paste0(project_location, "/project_output/graphs"))) {

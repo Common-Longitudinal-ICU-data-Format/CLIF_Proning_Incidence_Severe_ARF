@@ -5,15 +5,57 @@ date: "`r Sys.Date()`"
 output: html_document
 ---
 
-#Specify File Paths, Project Path and Site - SITE SPECIFIC
+#BEFORE RUNNING UPDATE CONFIG_TEMPLATE to config.yaml
 #Load the Required CLIF Tables (or if using ARROW/parquet refer to table in situ on storage drive)
-```{r}
+```{r setup, include=FALSE}
+packages <- c("duckdb", 
+              "lubridate", 
+              "tidyverse", 
+              "dplyr",
+              "table1", 
+              "broom", 
+              "arrow", 
+              "rvest", 
+              "readr", 
+              "fst", 
+              "data.table", 
+              "collapse", 
+              "tictoc",
+              "yaml",
+              "rprojroot")
 
-site_time_zone <-"America/New_York" #Add your local time zone prior to UTC conversion, options for this Analysis are EST = 'America/New_York', CST = 'America/Chicago', PST = 'America/Los_Angeles' 
-tables_location <-"/projects/CLIF-analysis/critcare_rclif_2-1/critcare_rclif_2_1_tables" #Add local path to CLIF tables
-project_location <-"/projects/CLIF-analysis/clif_projects/CLIF_Prone_Parent/CLIF_Proning_Incidence_Severe_ARF" #Add local path to project location, where results will output
-site <-"Hopkins" #Add local site name
-file_type <-"parquet" #Options are "parquet" or "csv"
+install_if_missing <- function(package) {
+  if (!require(package, character.only = TRUE)) {
+    install.packages(package, dependencies = TRUE)
+    library(package, character.only = TRUE)
+  }
+}
+
+sapply(packages, install_if_missing)
+rm(packages, install_if_missing)
+
+#Set Working Director as the Project Root
+project_root <- file.path( find_root(rprojroot::has_dir("CLIF_Proning_Incidence_Severe_ARF")),
+  "CLIF_Proning_Incidence_Severe_ARF")
+knitr::opts_knit$set(root.dir = project_root)
+getwd()
+
+
+#Use Dplyr select as default
+select <- dplyr::select
+
+#Load Config and Setting
+config = yaml::read_yaml(paste0(project_root, '/config/config.yaml'))
+
+### user entered site details ---------------------------------------------------
+site             = tolower(config$site)
+file_type        = tolower(config$file_type)  
+tables_location  = config$clif_data_path 
+project_location = config$project_location
+site_time_zone = config$site_time_zone
+
+
+setwd(project_location)
 
 check_timezone <- function(site_timezone, intended_timezone = Sys.timezone()) {
   if (site_timezone != intended_timezone) {
@@ -47,37 +89,6 @@ if (!dir.exists(paste0(project_location, "/project_tables"))) {
 if (!dir.exists(paste0(project_location, "/project_output"))) {
   dir.create(paste0(project_location, "/project_output"))
 }
-```
-
-
-```{r Load Needed Libraries, include=FALSE}
-packages <- c("duckdb", 
-              "lubridate", 
-              "tidyverse", 
-              "dplyr",
-              "table1", 
-              "broom", 
-              "arrow", 
-              "rvest", 
-              "readr", 
-              "fst", 
-              "data.table", 
-              "collapse", 
-              "tictoc")
-
-install_if_missing <- function(package) {
-  if (!require(package, character.only = TRUE)) {
-    install.packages(package, dependencies = TRUE)
-    library(package, character.only = TRUE)
-  }
-}
-
-sapply(packages, install_if_missing)
-rm(packages, install_if_missing)
-
-#Use Dplyr select as default
-select <- dplyr::select
-
 ```
 
 ```{r Keep Track of HOw Long this Markdown Takes to Run, Can Potentially Identify Issues}

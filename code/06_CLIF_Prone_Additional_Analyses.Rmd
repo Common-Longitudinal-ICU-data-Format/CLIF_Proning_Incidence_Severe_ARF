@@ -5,19 +5,88 @@ date: "`r Sys.Date()`"
 output: html_document
 ---
 
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+#Install Following Libraries For this Project
+packages_to_install =
+  c("tidyverse",
+    "tidytable",
+    "data.table",
+    "collapse",
+    "arrow",
+    "tableone",
+    "viridis",
+    "sandwich",
+    "lmtest",
+    "marginaleffects",
+    "yaml",
+    "rprojroot")
+
+#Can Load For Each Individual RMarkdown
+packages_to_load =
+  c(
+    "tidyverse",
+    "tidytable",
+    "data.table",
+    "collapse",
+    "arrow",
+    "tableone",
+    "viridis",
+    "sandwich",
+    "lmtest",
+    "marginaleffects",
+    "yaml",
+    "rprojroot")
+options(dplyr.summarise.inform = FALSE)
+
+fn_install_if_mi = function(p) {
+  if (!requireNamespace(p, quietly = TRUE)) {
+    try(install.packages(p, dependencies = TRUE), silent = TRUE)
+  }
+}
+
+fn_load_quiet = function(p) {
+  suppressPackageStartupMessages(library(p, character.only = TRUE))
+}
+
+invisible(lapply(packages_to_install, fn_install_if_mi))
+invisible(lapply(packages_to_load,   fn_load_quiet))
+options(dplyr.summarise.inform = FALSE)
+rm(packages_to_install, packages_to_load, fn_install_if_mi, fn_load_quiet); gc()
+
+#Set Working Directory as the Project Root
+project_root <- file.path( find_root(rprojroot::has_dir("CLIF_Proning_Incidence_Severe_ARF")),
+  "CLIF_Proning_Incidence_Severe_ARF")
+knitr::opts_knit$set(root.dir = project_root)
+getwd()
+
+#Load Config and Setting
+config = yaml::read_yaml(paste0(project_root, '/config/config.yaml'))
+
+### user entered site details ---------------------------------------------------
+site             = tolower(config$site)
+file_type        = tolower(config$file_type)  
+tables_location  = config$clif_data_path 
+project_location = config$project_location
+site_time_zone = config$site_time_zone
+
+setwd(project_location)
+
+#Use Dplyr functions as default
+filter <- dplyr::filter
+mutate <- dplyr::mutate
+select <- dplyr::select
+arrange <- dplyr::arrange
+group_by <- dplyr::group_by
+summarise <- dplyr::summarise
+lead <- dplyr::lead
+lag <- dplyr::lag
+coalesce <- dplyr::coalesce
+n <- dplyr::n
+```
+
 ```{r}
-#Specify File Paths, Project Path and Site - SITE SPECIFIC
-#Load the Required CLIF Tables (or if using ARROW/parquet refer to table in situ on storage drive)
-
-site_time_zone <-"America/New_York" #Add your local time zone prior to UTC conversion, options for this Analysis are EST = 'America/New_York', CST = 'America/Chicago', PST = 'America/Los_Angeles' 
-tables_location <-"/projects/CLIF-analysis/critcare_rclif_2-1/critcare_rclif_2_1_tables" #Add local path to CLIF tables
-project_location <-"/projects/CLIF-analysis/clif_projects/CLIF_Prone_Parent/CLIF_Proning_Incidence_Severe_ARF" #Add local path to project location, where results will output
-site <-"Hopkins" #Add local site name
-file_type <-"parquet" #Options are "parquet" or "csv"
-#Path to Datasets from Initial Prone Project Run (last run in June 2025)
-original_analytic_data <- '/projects/CLIF-analysis/clif_projects/CLIF_Prone_Parent/CCM_R0'
-
-
 check_timezone <- function(site_timezone, intended_timezone = Sys.timezone()) {
   if (site_timezone != intended_timezone) {
     cat("Warning: You specified", site_timezone, "but your system time zone is", intended_timezone, "\n")
@@ -46,64 +115,7 @@ setwd(project_location)
 ```
 
 
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
 
-#Install Following Libraries For this Project
-packages_to_install =
-  c("tidyverse",
-    "tidytable",
-    "data.table",
-    "collapse",
-    "arrow",
-    "tableone",
-    "viridis",
-    "sandwich",
-    "lmtest",
-    "marginaleffects")
-
-#Can Load For Each Individual RMarkdown
-packages_to_load =
-  c(
-    "tidyverse",
-    "tidytable",
-    "data.table",
-    "collapse",
-    "arrow",
-    "tableone",
-    "viridis",
-    "sandwich",
-    "lmtest",
-    "marginaleffects")
-options(dplyr.summarise.inform = FALSE)
-
-fn_install_if_mi = function(p) {
-  if (!requireNamespace(p, quietly = TRUE)) {
-    try(install.packages(p, dependencies = TRUE), silent = TRUE)
-  }
-}
-
-fn_load_quiet = function(p) {
-  suppressPackageStartupMessages(library(p, character.only = TRUE))
-}
-
-invisible(lapply(packages_to_install, fn_install_if_mi))
-invisible(lapply(packages_to_load,   fn_load_quiet))
-options(dplyr.summarise.inform = FALSE)
-rm(packages_to_install, packages_to_load, fn_install_if_mi, fn_load_quiet); gc()
-
-#Use Dplyr functions as default
-filter <- dplyr::filter
-mutate <- dplyr::mutate
-select <- dplyr::select
-arrange <- dplyr::arrange
-group_by <- dplyr::group_by
-summarise <- dplyr::summarise
-lead <- dplyr::lead
-lag <- dplyr::lag
-coalesce <- dplyr::coalesce
-n <- dplyr::n
-```
 
 
 ```{r Optimize Use of Cores - Code from Pat Lyons}
@@ -375,12 +387,12 @@ ame_summary <- function(model_list) {
 
 ```{r Open Analytic Data}
 #NOTE: This Table is Created by the 00_file if you need to regenerate
-prone_analytic_df <- read_parquet(paste0(original_analytic_data, '/prone_analytic_data.parquet')) 
+prone_analytic_df <- read_parquet(paste0(project_location, '/project_tables/prone_analytic_data.parquet')) 
 
 #Apply Function to Convert to Local Timezone
 
 #Load Cohort_ids
-load(paste0(original_analytic_data, '/cohort_hospitalization_ids.RData')) 
+load(paste0(project_location, '/project_tables/cohort_hospitalization_ids.RData')) 
 cohort_hospitalization_ids <- cohort_hospitalization_ids |>
   mutate(hospitalization_id=as.character(hospitalization_id))
 

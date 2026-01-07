@@ -4,17 +4,65 @@ author: "Anna Barker and Chad Hochberg"
 date: "`r Sys.Date()`"
 output: html_document
 ---
-#This File is Run AFTER the Cohort Identification R Markdown ('cohort_identification_prone_incidence.Rmd')
-#Specify File Paths, Project Path and Site - SITE SPECIFIC
-#Load the Analytic File
+#This File is Run AFTER the Cohort Identification R Markdown ('00_cohort_identification_prone_incidence.Rmd')
+
+```{r setup, include=FALSE}
+packages <- c("lubridate", 
+              "tidyverse", 
+              "dplyr",
+              "yaml",
+              "rprojroot",
+              "tableone", 
+              "readxl", 
+              "arrow", 
+              "collapse", 
+              "data.table",
+              "viridis",
+              "sandwich", #Cluster Robust Standard Errors
+              "lmtest",  #Allows Calculation of Cluster Robust Standard Errors
+              "marginaleffects") #Predictions and Average Slopes for Average Marginal Effects
+
+install_if_missing <- function(package) {
+  if (!require(package, character.only = TRUE)) {
+    install.packages(package, dependencies = TRUE)
+    library(package, character.only = TRUE)
+  }
+}
+
+sapply(packages, install_if_missing)
+rm(packages, install_if_missing)
+
+#Set Working Director as the Project Root
+project_root <- file.path( find_root(rprojroot::has_dir("CLIF_Proning_Incidence_Severe_ARF")),
+  "CLIF_Proning_Incidence_Severe_ARF")
+knitr::opts_knit$set(root.dir = project_root)
+getwd()
+
+
+#Use Dplyr select as default
+select <- dplyr::select
+
+#Load Config and Setting
+config = yaml::read_yaml(paste0(project_root, '/config/config.yaml'))
+
+### user entered site details ---------------------------------------------------
+site             = tolower(config$site)
+file_type        = tolower(config$file_type)  
+tables_location  = config$clif_data_path 
+project_location = config$project_location
+site_time_zone = config$site_time_zone
+
+#Create Sub Folders for Graphs within Project Output Folder
+# Check if the output directory exists; if not, create it
+if (!dir.exists(paste0(project_location, "/project_output/graphs"))) {
+  dir.create(paste0(project_location, "/project_output/graphs"))
+}
+
+setwd(project_location)
+```
+
+
 ```{r}
-
-site_time_zone <-"America/New_York" #Add your local time zone prior to UTC conversion, options for this Analysis are EST = 'America/New_York', CST = 'America/Chicago', PST = 'America/Los_Angeles' 
-tables_location <-"Z:/barker/clif_3_22/CLIF-2.0.0-dttm-update-R"
-project_location <-"Z:/barker/clif_3_22/" #Add local path to project location, where results will output
-site <-"U Michigan" #Add local site name
-file_type <-"parquet" #Options are "parquet" or "csv"
-
 check_timezone <- function(site_timezone, intended_timezone = Sys.timezone()) {
   if (site_timezone != intended_timezone) {
     cat("Warning: You specified", site_timezone, "but your system time zone is", intended_timezone, "\n")
@@ -40,41 +88,6 @@ check_timezone <- function(site_timezone, intended_timezone = Sys.timezone()) {
 result <- check_timezone(site_time_zone)
 ```
 
-
-```{r Load Needed Libraries, include=FALSE}
-packages <- c("lubridate", 
-              "tidyverse", 
-              "dplyr",
-              "tableone", 
-              "readxl", 
-              "arrow", 
-              "collapse", 
-              "data.table",
-              "viridis",
-              "sandwich", #Cluster Robust Standard Errors
-              "lmtest",  #Allows Calculation of Cluster Robust Standard Errors
-              "marginaleffects") #Predictions and Average Slopes for Average Marginal Effects
-
-install_if_missing <- function(package) {
-  if (!require(package, character.only = TRUE)) {
-    install.packages(package, dependencies = TRUE)
-    library(package, character.only = TRUE)
-  }
-}
-
-sapply(packages, install_if_missing)
-rm(packages, install_if_missing)
-
-#Use Dplyr select as default
-select <- dplyr::select
-
-#Create Sub Folders for Graphs within Project Output Folder
-# Check if the output directory exists; if not, create it
-if (!dir.exists(paste0(project_location, "/project_output/graphs"))) {
-  dir.create(paste0(project_location, "/project_output/graphs"))
-}
-
-```
 
 ```{r Function to Convert Datetimes to Local Time Zone}
 #Write Function to Convert Datetime Columns to 'UTC'

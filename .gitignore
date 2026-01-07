@@ -12,6 +12,7 @@ initialize_renv.R
 
 ## ignore filtered CLIF tables stored as Rdata
 *.RData
+*.parquet
 
 #ignore source CLIF_ files 
 CLIF_*.parquet

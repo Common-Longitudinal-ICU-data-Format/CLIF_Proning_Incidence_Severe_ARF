@@ -1,0 +1,5 @@
+clif_data_path: "/projects/CLIF-analysis/critcare_rclif_2-1/critcare_rclif_2_1_tables" # No Parenthesis on the end
+project_location: "/projects/CLIF-analysis/clif_projects/CLIF_Prone_Parent/CLIF_Proning_Incidence_Severe_ARF" # No Parenthesis on the end
+file_type: "parquet"
+site: "hopkins"
+site_time_zone: "America/New_York"
