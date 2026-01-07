@@ -10,7 +10,7 @@ output: html_document
 ```{r}
 
 site_time_zone <-"America/New_York" #Add your local time zone prior to UTC conversion, options for this Analysis are EST = 'America/New_York', CST = 'America/Chicago', PST = 'America/Los_Angeles' 
-tables_location <-"/projects/CLIF-analysis/critill_rclif_2_1/critill_rclif_2_1_tables" #Add local path to CLIF tables
+tables_location <-"/projects/CLIF-analysis/critcare_rclif_2-1/critcare_rclif_2_1_tables" #Add local path to CLIF tables
 project_location <-"/projects/CLIF-analysis/clif_projects/CLIF_Prone_Parent/CLIF_Proning_Incidence_Severe_ARF" #Add local path to project location, where results will output
 site <-"Hopkins" #Add local site name
 file_type <-"parquet" #Options are "parquet" or "csv"
@@ -849,7 +849,7 @@ prone_episodes <- prone_episodes_all |>
     position_category!=lag(position_category), 1)) |>
   mutate(keep=fifelse(
     #IF Both Prone and Supine Are Recorded at the Same Time Will Exclude
-    position_category!=lag(position_category) & recorded_dttm==lag(recorded_dttm), 0, keep)) |>
+    position_category!=lag(position_category) & recorded_dttm==lag(recorded_dttm), 0, keep, 1)) |>
   ungroup() |>
   filter(keep==1) |>
   #Deal with Last Row if It is NOT a new Category
