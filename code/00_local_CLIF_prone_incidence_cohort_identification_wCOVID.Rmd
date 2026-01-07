@@ -179,6 +179,23 @@ if (length(missing_tables) > 0) {
 # Filter only the filenames that are required
 required_filenames <- clif_table_filenames[clif_table_basenames %in% required_files]
 
+cast_large_utf8_to_utf8 <- function(x) {
+  # Only applies to Arrow objects that have a schema()
+  # (open_dataset() returns an Arrow Dataset / query)
+  sch <- arrow::schema(x)
+
+  large_cols <- vapply(
+    sch$fields,
+    function(f) f$type$ToString() %in% c("large_string", "large_utf8"),
+    logical(1)
+  )
+
+  cols_to_cast <- sch$names[large_cols]
+  if (length(cols_to_cast) == 0) return(x)
+
+  x %>% mutate(across(all_of(cols_to_cast), ~ arrow::cast(.x, arrow::utf8())))
+}
+
 # Read the required files into a list of data frames
 if (file_type == "parquet") {
   data_list <- lapply(required_filenames, open_dataset)
@@ -984,6 +1001,7 @@ proseva_prone_table <- proseva_criteria |>
 
 ```
 
+
 ```{r Now Build Final Cohort}
 prone_incidence_cohort <- vent_eligible |>
   left_join(proseva_prone_table) |>
@@ -1416,7 +1434,7 @@ sars_cov2 <- clif_microbiology_nonculture |>
   select(patient_id, organism_category, collect_dttm, result_category) |> #Want to Merge on Patient Level
   filter(organism_category %in% c('sars_cov2')) |>
   left_join(cohort_hospitalization_ids) |> #Merges in Encounter Block
-  left_join(cohort_times) |>
+  left_join(cohort_times, by = c('patient_id', 'encounter_block')) |>
   collect() |>
   filter(collect_dttm<=t_enrollment & collect_dttm>=t_enrollment-dweeks(4)) |>
   group_by(patient_id, encounter_block) |>
@@ -1524,12 +1542,6 @@ for (table_name in names(table_flags)[table_flags]) {
 clif_patient_cohort <- clif_patient |>
   filter(patient_id %in% cohort_hospitalization_ids$patient_id) |>
   collect()
-```
-
-## Save all filtered tables to the `study_cohort` folder
-```{r}
-save(list = ls(pattern = "clif_.*_cohort"), 
-     file = paste0(project_location, "/project_tables/clif_cohort_tables.RData"))
 ```
 
 
