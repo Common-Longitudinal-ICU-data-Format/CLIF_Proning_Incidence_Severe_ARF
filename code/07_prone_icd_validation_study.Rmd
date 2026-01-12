@@ -939,7 +939,11 @@ icd_only_summary <- icd_only_prone_qc_table %>%
   )
 
 icd_only_summary
+write.csv(icd_only_summary,
+         file = paste0(project_location, '/project_output/revision/icd/', site, '_icd_only_summary.csv'),row.names = FALSE)
 
+cat("\nICD-only summary data saved as '",
+    paste0(project_location, '/project_output/revision/icd/', site, '_icd_only_summary.csv'),"'\n", sep = "")
 ```
 
 
