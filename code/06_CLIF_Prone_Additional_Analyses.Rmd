@@ -1095,4 +1095,64 @@ table_list <- tab_decomp(outcomes_table)
 write_csv(table_list$continuous, paste0(project_location, '/project_output/revision/', site, '_cont_outcomes_by_proned_period.csv'))
 write_csv(table_list$categorical, paste0(project_location, '/project_output/revision/', site, '_cat_outcomes_by_proned_period.csv'))
 ```
+```{r Evalute Proning Duration as Categorical Variable}
+prone_analytic_df <- prone_analytic_df |>
+  mutate(
+    first_prone_episode_cat = case_when(
+      first_prone_episode_hours <= 12 ~ "<=12 hours",
+      first_prone_episode_hours > 12 & first_prone_episode_hours <= 16 ~ "12-16 hours",
+      first_prone_episode_hours > 16 & first_prone_episode_hours <= 24 ~ "16-24 hours",
+      first_prone_episode_hours > 24 & first_prone_episode_hours <= 48 ~ "24-48 hours",
+      first_prone_episode_hours > 48 ~ ">48 hours",
+      TRUE ~ NA_character_
+    ),
+    mean_pt_prone_cat = case_when(
+      mean_pt_prone_duration <= 12 ~ "<=12 hours",
+      mean_pt_prone_duration > 12 & mean_pt_prone_duration <= 16 ~ "12-16 hours",
+      mean_pt_prone_duration > 16 & mean_pt_prone_duration <= 24 ~ "16-24 hours",
+      mean_pt_prone_duration > 24 & mean_pt_prone_duration <= 48 ~ "24-48 hours",
+      mean_pt_prone_duration > 48 ~ ">48 hours",
+      TRUE ~ NA_character_
+    ),
+    median_pt_prone_cat = case_when(
+      median_pt_prone_duration <= 12 ~ "<=12 hours",
+      median_pt_prone_duration > 12 & median_pt_prone_duration <= 16 ~ "12-16 hours",
+      median_pt_prone_duration > 16 & median_pt_prone_duration <= 24 ~ "16-24 hours",
+      median_pt_prone_duration > 24 & median_pt_prone_duration <= 48 ~ "24-48 hours",
+      median_pt_prone_duration > 48 ~ ">48 hours",
+      TRUE ~ NA_character_
+    )
+  ) |>
+  mutate(across(
+    c(first_prone_episode_cat, mean_pt_prone_cat, median_pt_prone_cat),
+    ~ factor(., levels = c("<=12 hours", "12-16 hours", "16-24 hours", "24-48 hours", ">48 hours"), 
+             ordered = TRUE)
+  ))
+
+to_tab <- c(
+  'first_prone_episode_hours',
+  'mean_pt_prone_duration',
+  'median_pt_prone_duration',
+  'first_prone_episode_cat',
+  'mean_pt_prone_cat',
+  'median_pt_prone_cat'
+)
+
+factors_tab <- c(
+  'first_prone_episode_cat',
+  'mean_pt_prone_cat',
+  'median_pt_prone_cat'
+)
+
+prone_duration_table <- CreateTableOne(
+  data=prone_analytic_df, 
+  vars=to_tab, 
+  factorVars=factors_tab,
+  strata='study_period', 
+  addOverall = T)
+
+summary(prone_duration_table)
+table_list <- tab_decomp(prone_duration_table)
+write_csv(table_list$categorical, paste0(project_location, '/project_output/revision/', site, '_prone_duration_categorical.csv'))
+```
 
