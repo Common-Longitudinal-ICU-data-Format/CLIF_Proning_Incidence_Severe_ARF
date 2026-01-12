@@ -1154,5 +1154,7 @@ prone_duration_table <- CreateTableOne(
 summary(prone_duration_table)
 table_list <- tab_decomp(prone_duration_table)
 write_csv(table_list$categorical, paste0(project_location, '/project_output/revision/', site, '_prone_duration_categorical.csv'))
+write_csv(table_list$continuous, paste0(project_location, '/project_output/revision/', site, '_prone_duration_continuous.csv'))
+
 ```
 
