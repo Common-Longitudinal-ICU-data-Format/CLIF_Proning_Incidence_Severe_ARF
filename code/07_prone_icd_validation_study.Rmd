@@ -266,7 +266,6 @@ dup_hospitalization_ids #check for duplicate hospitalization_ids - looks like th
 ```
 
 
-
 ```{r Raw proning code counts}
 
 # proning procedure codes (ICD10PCS)
@@ -325,7 +324,6 @@ larger_proning_table <- dplyr::case_when(
   TRUE ~ "same size"
 )
 larger_proning_table
-
 ```
 
 
@@ -357,10 +355,7 @@ proning_summary <- data.frame(
   proning_table = larger_proning_table,
   earliest_procedure_billed_dttm = earliest_procedure_billed_dttm
 )
-
 write_csv(proning_summary, paste0(project_location, '/project_output/revision/icd/', site, '_summary.csv'))
-
-
 ```
 
 
@@ -441,9 +436,6 @@ proning_icd
 
 ```
 
-
-
-
 ```{r}
 ventilation_icd <- open_dataset(paste0(tables_location, "/clif_patient_procedures.parquet")) |>
   mutate(hospitalization_id = as.character(hospitalization_id)) |>
@@ -507,7 +499,7 @@ proning_code_counts <- joined_df %>%
   mutate(
     N_hospitals = length(unique(joined_df$hospital_id)),
     #N Hospitals with Proning ICD
-    n_hospitals_proneICD = length(unique(joined_df$hospital_id[!is.na(joined_df$proning_8_24h) | !is.na(joined_df$proning_8_24h) | !is.na(joined_df$proning_gt24h)]))
+    n_hospitals_proneICD = length(unique(joined_df$hospital_id[!is.na(joined_df$proning_lt8h) | !is.na(joined_df$proning_8_24h) | !is.na(joined_df$proning_gt24h)]))
   ) |>
   group_by(proning_lt8h, proning_8_24h, proning_gt24h) %>%
   summarise(
@@ -531,8 +523,6 @@ vent_code_counts <- joined_df %>%
   )
 
 write_csv(vent_code_counts, paste0(project_location, '/project_output/revision/icd/', site, '_vent_code_counts.csv'))
-
-
 ```
 
 ```{r}
@@ -543,16 +533,10 @@ joined_df <- joined_df %>%
 joined_df <- joined_df %>%
   mutate(any_ventilation_icd = as.integer(vent_lt24h == 1 | vent_24_96h == 1 | vent_gt96h == 1),
          any_ventilation_icd = ifelse(is.na(any_ventilation_icd), 0L, any_ventilation_icd))
-
-joined_df$any_ventilation_flowsheet = 1
-
-joined_df
-
 ```
 
 
 ```{r}
-
 # create confusion table
 confusion <- joined_df %>%
   summarise(
@@ -872,8 +856,88 @@ grid.arrange(
   heights = c(1, 1)
 )
 
-dev.off()
-
 cat("\nSummary figure saved as '", paste0(project_location, '/project_output/revision/icd/', site, '_summary_figure.pdf'), "'\n", sep = "")
+```
+
+
+# QC
+```{r}
+proning_icd_events <- open_dataset(paste0(tables_location, "/clif_patient_procedures.parquet")) |>
+  mutate(hospitalization_id = as.character(hospitalization_id)) |>
+  dplyr::semi_join(cohort_hospitalization_ids, by = "hospitalization_id") |>
+  dplyr::left_join(
+    cohort_hospitalization_ids |>
+      select(hospitalization_id, patient_id, encounter_block),
+    by = "hospitalization_id"
+  ) |>
+  collect() |>
+  filter(
+    toupper(procedure_code_format) %in% c("ICD10PCS", "ICD-10-PCS"),
+    grepl(proning_pattern, procedure_code, ignore.case = TRUE)
+  ) |>
+  mutate(
+    procedure_code = toupper(procedure_code)
+  ) |> 
+  transmute(
+    patient_id,
+    encounter_block,
+    icd_prone_dttm = procedure_billed_dttm
+  ) |> 
+  filter(!is.na(icd_prone_dttm))
+```
+
+```{r}
+first_proning_icd_df <- proning_icd_events %>%
+  group_by(patient_id, encounter_block) %>%
+  summarise(
+    first_proning_icd_dttm = min(icd_prone_dttm),
+    .groups = "drop"
+  )
+
+joined_df_qc <- joined_df %>%
+  left_join(
+    first_proning_icd_df,
+    by = c("patient_id", "encounter_block")
+  )
+
+icd_only_prone_df <- joined_df_qc %>%
+  filter(
+    any_proning_icd == 1,
+    proned == 0
+  )
+
+icd_only_prone_qc_table <- icd_only_prone_df %>%
+  mutate(
+    icd_to_clif_time_diff_hrs = as.numeric(
+      difftime(first_prone_time, first_proning_icd_dttm, units = "hours")
+    )
+  ) %>%
+  select(
+    patient_id,
+    encounter_block,
+    vent_duration_hours,
+    first_proning_icd_dttm,
+    first_prone_time,
+    icd_to_clif_time_diff_hrs,
+    proning_lt8h,
+    proning_8_24h,
+    proning_gt24h
+  )
+
+icd_only_summary <- icd_only_prone_qc_table %>%
+  summarise(
+    n_icd_only = n(),
+    median_vent_hours = median(vent_duration_hours, na.rm = TRUE),
+    median_icd_to_clif_diff_hrs = median(icd_to_clif_time_diff_hrs, na.rm = TRUE),
+    pct_short_prone = mean(proning_lt8h == 1, na.rm = TRUE), 
+    pct_medium_prone = mean(proning_8_24h == 1, na.rm = TRUE), 
+    pct_long_prone = mean(proning_gt24h == 1, na.rm = TRUE)
+  )
+
+icd_only_summary
+
+```
+```{r}
+icd_only_prone_qc_table
 ```
 
