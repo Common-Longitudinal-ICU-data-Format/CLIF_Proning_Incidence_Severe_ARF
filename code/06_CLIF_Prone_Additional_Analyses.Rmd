@@ -711,9 +711,9 @@ vent_practices <- clif_resp |>
   mutate(
    #FOr Those That are Less Than 5 Feet Use Modifiation of IBW set at that of a 5 foot person
    #Study Height CM Outlier
-   study_height_cm=fcase(
+   study_height_cm=fifelse(
      study_height_cm>243 | study_height_cm<76, NaN,
-     default=study_height_cm),
+     study_height_cm),
    height_inches=study_height_cm/2.54, 
    ibw=data.table::fcase(
       female==0, 50 + 2.3*(height_inches-60),
@@ -730,10 +730,9 @@ vent_practices <- clif_resp |>
 vent_practices <- vent_practices |>
   #Tidal Volume
   mutate(
-    tidal_volume=fcase(
-      tidal_volume>1500, NaN, 
-      tidal_volume<150, NaN,
-      default =tidal_volume
+    tidal_volume=fifelse(
+      tidal_volume>1500 | tidal_volume<150, NaN, 
+      tidal_volume
     ),
     tv_pbw=tidal_volume/ibw,
     peep_set=fifelse(peep_set>=35, NaN, peep_set),
