@@ -653,7 +653,7 @@ summary(multivar_mod)
 multivar_mod_summary <- model_summary_table(multivar_mod)
 
 # Write the table to a CSV file
-write.csv(multivar_mod_summary, paste0(project_location, '/project_output/revision', site, '_adjusted_models_moderate_ards.csv'))
+write.csv(multivar_mod_summary, paste0(project_location, '/project_output/revision/', site, '_adjusted_models_moderate_ards.csv'))
 
 #Output a Table of Average Marginal Effects Using the AME Function Created Above
 model_list <- list(multivar_mod)
