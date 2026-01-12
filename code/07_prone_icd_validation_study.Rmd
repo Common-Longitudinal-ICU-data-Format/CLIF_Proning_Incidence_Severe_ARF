@@ -1,0 +1,879 @@
+---
+title: "07_prone_icd"
+author: "Cathy Gao and Chad Hochberg"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+
+```{r setup, include=FALSE}
+packages <- c("lubridate", 
+              "tidyverse", 
+              "dplyr",
+              "yaml",
+              "rprojroot",
+              "tableone", 
+              "readxl", 
+              "arrow", 
+              "collapse", 
+              "data.table",
+              "viridis",
+              "sandwich", #Cluster Robust Standard Errors
+              "lmtest",  #Allows Calculation of Cluster Robust Standard Errors
+              "marginaleffects") #Predictions and Average Slopes for Average Marginal Effects
+
+install_if_missing <- function(package) {
+  if (!require(package, character.only = TRUE)) {
+    install.packages(package, dependencies = TRUE)
+    library(package, character.only = TRUE)
+  }
+}
+
+sapply(packages, install_if_missing)
+rm(packages, install_if_missing)
+
+#Set Working Director as the Project Root
+project_root <- file.path( find_root(rprojroot::has_dir("CLIF_Proning_Incidence_Severe_ARF")),
+  "CLIF_Proning_Incidence_Severe_ARF")
+#project_root <- file.path( find_root(rprojroot::has_dir("CLIF_Proning_Incidence_Severe_ARF-main-Jan 2026 rerun")),
+#  "CLIF_Proning_Incidence_Severe_ARF-main-Jan 2026 rerun")
+knitr::opts_knit$set(root.dir = project_root)
+getwd()
+
+
+#Use Dplyr select as default
+select <- dplyr::select
+
+#Load Config and Setting
+config = yaml::read_yaml(paste0(project_root, '/config/config.yaml'))
+
+### user entered site details ---------------------------------------------------
+site             = tolower(config$site)
+file_type        = tolower(config$file_type)  
+tables_location  = config$clif_data_path 
+project_location = config$project_location
+site_time_zone = config$site_time_zone
+
+#Create Sub Folders for Graphs within Project Output Folder
+# Check if the output directory exists; if not, create it
+if (!dir.exists(paste0(project_location, "/project_output/graphs"))) {
+  dir.create(paste0(project_location, "/project_output/graphs"))
+}
+
+setwd(project_location)
+```
+
+
+
+```{r Optimize Use of Cores - Code from Pat Lyons}
+### threads and ram ------------------------------------------------------------
+
+os_type   = Sys.info()[["sysname"]]
+all_cores = parallel::detectCores(logical = TRUE)
+all_cores = if (is.na(all_cores)) 1L else as.integer(all_cores)
+
+get_ram_gb = function() {
+  tryCatch({
+    if (os_type == "Darwin") {
+      # macOS: sysctl reports total RAM in bytes
+      bytes = suppressWarnings(
+        as.numeric(system("sysctl -n hw.memsize", intern = TRUE))
+      )
+      if (length(bytes) > 0 && !is.na(bytes)) bytes / 1024^3 else NA_real_
+    } else {
+      # Windows & Linux: ps is usually reliable
+      mem_info <- ps::ps_system_memory()
+      key <- intersect(c("available", "avail"), names(mem_info))
+      val <- if (length(key) > 0) mem_info[[key]] / 1024^3 else NA_real_
+  
+      if (is.finite(val)) val else {
+        # Linux fallback: read /proc/meminfo directly
+        if (file.exists("/proc/meminfo")) {
+          kb = suppressWarnings(
+            as.numeric(system("awk '/MemAvailable/ {print $2}' /proc/meminfo", intern = TRUE))
+          )
+          if (length(kb) > 0 && !is.na(kb)) kb / 1024^2 else NA_real_
+        } else {
+          NA_real_
+        }
+      }
+    }
+  }, error = function(e) NA_real_)
+}
+
+avail_ram_gb = get_ram_gb()
+
+## choose threads conservatively (00 is light; keep headroom) ------------------
+
+reserve_cores   = 1L
+gb_per_thread   = 0.50
+max_by_cores    = max(1L, all_cores - reserve_cores)
+max_by_memory   = if (is.finite(avail_ram_gb)) max(1L, floor(avail_ram_gb / gb_per_thread)) else max_by_cores
+n_threads       = as.integer(max(1L, min(max_by_cores, max_by_memory, 8L)))
+n_math_threads  = as.integer(max(1L, min(n_threads, 8L)))
+
+## apply thread settings -------------------------------------------------------
+
+data.table::setDTthreads(threads = n_threads)
+collapse::set_collapse(nthreads  = n_threads)
+options(arrow.use_threads        = TRUE)
+Sys.setenv(ARROW_NUM_THREADS     = n_threads)
+options(mc.cores                 = n_threads)
+
+# concise summary
+message(
+  sprintf("Env OK | OS=%s | Cores=%d | Threads=%d | MathThreads=%d | Avail RAM≈%s GB",
+          os_type, all_cores, n_threads, n_math_threads,
+          ifelse(is.finite(avail_ram_gb), round(avail_ram_gb, 1), "NA"))
+)
+```
+
+
+```{r Create ICD sub Folders}
+### file locations -------------------------------------------------------------
+if (!dir.exists(paste0(project_location, "/project_output"))) {
+  dir.create(paste0(project_location, "/project_output"))
+}
+if (!dir.exists(paste0(project_location, "/project_output/revision"))) {
+  dir.create(paste0(project_location, "/project_output/revision"))
+}
+if (!dir.exists(paste0(project_location, "/project_output/revision/icd"))) {
+  dir.create(paste0(project_location, "/project_output/revision/icd"))
+}
+```
+
+```{r Function to Convert Datetimes to Local Time Zone}
+#Write Function to Convert Datetime Columns to 'UTC'
+fn.timezone_tolocal <- function(df) {
+  # Get the dataset schema
+  sch <- df$schema
+  #Which Fields are Datetime Types?
+  datetime_fields <- keep(sch$fields, function(field) {
+    grepl("^timestamp", field$type$ToString())
+  })
+  # Extract the names of these datetime columns
+  datetime_cols <- map_chr(datetime_fields, "name")
+  
+  #Now Convert DateTime Columns to Local Timezone
+  df <- df %>%
+    mutate(across(all_of(datetime_cols), ~ cast(.x, arrow::timestamp("us", site_time_zone)))) |>
+    compute()
+}
+```
+
+```{r Function to Decompose Table 1 Summaries for 'Easy' Pooling}
+tab_decomp <- function(table) {
+  
+  results_list <- list()  # Prepare an empty list to store results
+
+  
+#First Do Continuous Table  
+if (!is.null(table$ContTable)) {
+  strata <- rownames(table$ContTable)
+  for (i in strata) {
+    # Extract the relevant names and data for the current strata
+    rows <- rownames(table$ContTable[[i]])
+    cols <- colnames(table$ContTable[[i]])
+    
+    x <- as_tibble(table$ContTable[[i]])
+    colnames(x) <- cols
+    
+    # Create a new tibble with the desired structure
+    x <- x |>
+      mutate(
+        strata = i, 
+        variable = rows) |>
+      relocate(strata, variable, .before = 1)
+    
+    results_list[[i]] <- x  # Append result to the list
+  }
+  # Combine all results into a single tibble
+  cont_table <- rowbind(results_list)
+  
+} else {
+  cat('\n No Continuous Table for These Variables\n')
+  cont_table <- NULL  # Assign NULL if there are no continuous tables
+} 
+  #Now Categorical Table
+ results_list <- list() #Reinitialize List
+if (!is.null(table$CatTable)) {  
+    strata <- rownames(table$CatTable)
+  for (i in strata) {
+    category <- table$MetaData$varFactors
+    for (z in category) {
+    # Extract the relevant names and data for the current strata
+    rows <- rownames(table$CatTable[[i]][[z]])
+    cols <- colnames(table$CatTable[[i]][[z]])
+    
+    x <- as_tibble(table$CatTable[[i]][[z]])
+    colnames(x) <- cols
+    
+    # Create a new tibble with the desired structure
+    x <- x |>
+      mutate(
+        strata = i, 
+        variable = z) |>
+      relocate(strata, variable, level, .before = 1)
+    
+    results_list[[length(results_list) + 1]] <- x  # Append result to the list
+    }
+      }
+  # Combine all results into a single tibble
+  cat_table <- rowbind(results_list)
+} else {
+  cat('\n No Categorical Table for These Variables\n')
+  cat_table <- NULL  # Assign NULL if there are no categorical tables
+} 
+  #Put Two Tables into  a List
+  table_list <- list(continuous = cont_table, categorical = cat_table)
+  return(table_list)
+  }
+```
+
+
+```{r Load Site-specific analytic data set and Convert to Local Time Zone}
+#NOTE: This Table is Created by the 00_file if you need to regenerate
+prone_analytic_df <- open_dataset(paste0(project_location, '/project_tables/prone_analytic_data.parquet')) 
+
+#Apply Function to Convert to Local Timezone
+prone_analytic_df <- fn.timezone_tolocal(prone_analytic_df)
+  
+#Bring Into R Environment as Dataframe
+prone_analytic_df <- prone_analytic_df |> collect()
+
+#Limit to 2023 and 2024
+prone_analytic_df <- prone_analytic_df |>
+  filter(year(t_enrollment)>=2023)
+
+prone_analytic_df
+```
+
+```{r}
+#Get list of Hospitalization IDs; some admissions (defined as patient_id+encounter_block, can span multiple hospitalization_ids [i.e. transferred between site hospitals])
+
+load(paste0(project_location, '/project_tables/cohort_hospitalization_ids.RData')) 
+
+cohort_hospitalization_ids <- cohort_hospitalization_ids |>
+  mutate(hospitalization_id = as.character(hospitalization_id)) 
+
+cohort_hospitalization_ids
+
+dup_hospitalization_ids <- cohort_hospitalization_ids |>
+  count(hospitalization_id) |>
+  filter(n > 1)
+
+dup_hospitalization_ids #check for duplicate hospitalization_ids - looks like there are none yay 
+```
+
+
+
+```{r Raw proning code counts}
+
+# proning procedure codes (ICD10PCS)
+proning_codes <- c(
+  "5A09B5K",
+  "5A09C5K",
+  "5A09D5K"
+)
+
+proning_code_map <- c(
+  "5A09B5K" = "Assistance with Resp Ventilation, <8 Hrs, Intub Prone",
+  "5A09C5K" = "Assistance with Resp Ventilation, 8-24 Hrs, Intub Prone",
+  "5A09D5K" = "Assistance with Resp Ventilation, >24 Hrs, Intub Prone"
+)
+
+proning_pattern <- paste0("^(", paste(proning_codes, collapse = "|"), ")")
+
+#  counts by code and name
+proning_counts_proc <- open_dataset(paste0(tables_location, "/clif_patient_procedures.parquet")) |>
+  collect() |>
+  filter(
+    toupper(procedure_code_format) %in% c("ICD10PCS", "ICD-10-PCS"),
+    grepl(proning_pattern, procedure_code, ignore.case = TRUE)
+  ) |>
+  mutate(
+    procedure_code = toupper(procedure_code),
+    procedure_name = proning_code_map[procedure_code]
+  ) |>
+  count(procedure_code, procedure_name, sort = TRUE)
+
+proning_counts_proc
+```
+
+```{r Raw proning code counts check diagnosis table}
+
+# optional counts by code and name
+proning_counts_dx <- open_dataset(paste0(tables_location, "/clif_hospital_diagnosis.parquet")) |>
+  collect() |>
+  filter(
+    grepl(proning_pattern, diagnosis_code, ignore.case = TRUE)
+  ) |>
+  mutate(
+    diagnosis_code = toupper(diagnosis_code),
+    procedure_name = proning_code_map[diagnosis_code]
+  ) |>
+  count(diagnosis_code, procedure_name, sort = TRUE)
+
+proning_counts_dx
+```
+
+
+```{r See which table is bigger}
+larger_proning_table <- dplyr::case_when(
+  nrow(proning_counts_proc) > nrow(proning_counts_dx) ~ "clif_patient_procedures",
+  nrow(proning_counts_dx) > nrow(proning_counts_proc) ~ "clif_hospital_diagnosis",
+  TRUE ~ "same size"
+)
+larger_proning_table
+
+```
+
+
+
+```{r}
+# earliest documented instance by code and name
+
+library(lubridate)
+
+earliest_procedure_billed_dttm <- open_dataset(paste0(tables_location, "/", larger_proning_table, ".parquet")) |>
+  collect() |>
+  filter(
+    toupper(procedure_code_format) %in% c("ICD10PCS", "ICD-10-PCS"),
+    grepl(proning_pattern, procedure_code, ignore.case = TRUE)
+  ) |>
+  summarise(
+    earliest_procedure_billed_dttm = min(procedure_billed_dttm, na.rm = TRUE)
+  ) |>
+  pull(earliest_procedure_billed_dttm) |>
+  with_tz(tzone = site_time_zone)
+
+earliest_procedure_billed_dttm
+```
+
+
+```{r}
+# Prepare a data frame with the table name and earliest procedure
+proning_summary <- data.frame(
+  proning_table = larger_proning_table,
+  earliest_procedure_billed_dttm = earliest_procedure_billed_dttm
+)
+
+write_csv(proning_summary, paste0(project_location, '/project_output/revision/icd/', site, '_summary.csv'))
+
+
+```
+
+
+```{r}
+# ventilation procedure codes (ICD10PCS)
+ventilation_codes <- c(
+  "5A1935Z",
+  "5A1945Z",
+  "5A1955Z"
+)
+
+ventilation_code_map <- c(
+  "5A1935Z" = "Respiratory Ventilation, Less Than 24 Consecutive Hours",
+  "5A1945Z" = "Respiratory Ventilation, 24-96 Consecutive Hours",
+  "5A1955Z" = "Respiratory Ventilation, Greater Than 96 Consecutive Hours"
+)
+
+ventilation_pattern <- paste0("^(", paste(ventilation_codes, collapse = "|"), ")")
+
+# counts by ventilation code and name
+ventilation_counts_proc <- open_dataset(paste0(tables_location, "/", larger_proning_table, ".parquet"))|>
+  collect() |>
+  filter(
+    toupper(procedure_code_format) %in% c("ICD10PCS", "ICD-10-PCS"),
+    grepl(ventilation_pattern, procedure_code, ignore.case = TRUE)
+  ) |>
+  mutate(
+    procedure_code = toupper(procedure_code),
+    procedure_name = ventilation_code_map[procedure_code]
+  ) |>
+  count(procedure_code, procedure_name, sort = TRUE)
+
+ventilation_counts_proc
+
+```
+
+
+
+```{r Filter Dataset Only to After The First Instance of Billing}
+prone_analytic_df <- prone_analytic_df |>
+  filter(t_enrollment>=earliest_procedure_billed_dttm)
+
+cohort_hospitalization_ids <- cohort_hospitalization_ids |>
+  semi_join(prone_analytic_df, by = c('patient_id', 'encounter_block')) 
+cohort_hospitalization_ids
+```
+
+
+
+
+```{r}
+
+proning_icd <- open_dataset(paste0(tables_location, "/", larger_proning_table, ".parquet")) |>
+  mutate(hospitalization_id = as.character(hospitalization_id)) |>
+  dplyr::semi_join(cohort_hospitalization_ids, by = "hospitalization_id") |>
+  dplyr::left_join(
+    cohort_hospitalization_ids |>
+      select(hospitalization_id, patient_id, encounter_block),
+    by = "hospitalization_id"
+  ) |>
+  collect() |>
+  filter(
+    toupper(procedure_code_format) %in% c("ICD10PCS", "ICD-10-PCS"),
+    grepl(proning_pattern, procedure_code, ignore.case = TRUE)
+  ) |>
+  mutate(
+    procedure_code = toupper(procedure_code)
+  ) |>
+  group_by(patient_id, encounter_block) |>
+  summarise(
+    proning_lt8h   = as.integer(any(procedure_code == "5A09B5K")),
+    proning_8_24h  = as.integer(any(procedure_code == "5A09C5K")),
+    proning_gt24h  = as.integer(any(procedure_code == "5A09D5K")),
+    .groups = "drop"
+  )
+
+proning_icd
+
+```
+
+
+
+
+```{r}
+ventilation_icd <- open_dataset(paste0(tables_location, "/clif_patient_procedures.parquet")) |>
+  mutate(hospitalization_id = as.character(hospitalization_id)) |>
+  dplyr::semi_join(cohort_hospitalization_ids, by = "hospitalization_id") |>
+  dplyr::left_join(
+    cohort_hospitalization_ids |>
+      select(hospitalization_id, patient_id, encounter_block),
+    by = "hospitalization_id"
+  ) |>
+  collect() |>
+  filter(
+    toupper(procedure_code_format) %in% c("ICD10PCS", "ICD-10-PCS"),
+    grepl(ventilation_pattern, procedure_code, ignore.case = TRUE)
+  ) |>
+  mutate(
+    procedure_code = toupper(procedure_code)
+  ) |>
+  group_by(patient_id, encounter_block) |>
+  summarise(
+    vent_lt24h   = as.integer(any(procedure_code == "5A1935Z")),
+    vent_24_96h  = as.integer(any(procedure_code == "5A1945Z")),
+    vent_gt96h   = as.integer(any(procedure_code == "5A1955Z")),
+    .groups = "drop"
+  )
+
+ventilation_icd
+
+```
+
+
+
+```{r}
+joined_df <- dplyr::left_join(
+  prone_analytic_df,
+  proning_icd,
+  by = c("patient_id", "encounter_block")
+)
+
+joined_df <- dplyr::left_join(
+  joined_df,
+  ventilation_icd,
+  by = c("patient_id", "encounter_block")
+)
+
+joined_df
+
+```
+
+
+```{r}
+
+colnames(joined_df)
+
+joined_df %>%
+  count(prone_episodes, sort = TRUE)
+
+library(dplyr)
+
+proning_code_counts <- joined_df %>%
+  #Total Number of Hospitals
+  mutate(
+    N_hospitals = length(unique(joined_df$hospital_id)),
+    #N Hospitals with Proning ICD
+    n_hospitals_proneICD = length(unique(joined_df$hospital_id[!is.na(joined_df$proning_8_24h) | !is.na(joined_df$proning_8_24h) | !is.na(joined_df$proning_gt24h)]))
+  ) |>
+  group_by(proning_lt8h, proning_8_24h, proning_gt24h) %>%
+  summarise(
+    count = n(),
+    N_hospitals_site=median(N_hospitals),
+    n_hospitals_with_prone_icd=median(n_hospitals_proneICD, na.rm=T),
+    median_pt_prone_duration = median(median_pt_prone_duration, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+
+write_csv(proning_code_counts, paste0(project_location, '/project_output/revision/icd/', site, '_proning_code_counts.csv'))
+
+
+vent_code_counts <- joined_df %>%
+  group_by(vent_lt24h, vent_24_96h, vent_gt96h) %>%
+  summarise(
+    count = n(),
+    median_vent_duration_hours = median(vent_duration_hours, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+write_csv(vent_code_counts, paste0(project_location, '/project_output/revision/icd/', site, '_vent_code_counts.csv'))
+
+
+```
+
+```{r}
+joined_df <- joined_df %>%
+  mutate(any_proning_icd = as.integer(proning_lt8h == 1 | proning_8_24h == 1 | proning_gt24h == 1),
+         any_proning_icd = ifelse(is.na(any_proning_icd), 0L, any_proning_icd))
+
+joined_df <- joined_df %>%
+  mutate(any_ventilation_icd = as.integer(vent_lt24h == 1 | vent_24_96h == 1 | vent_gt96h == 1),
+         any_ventilation_icd = ifelse(is.na(any_ventilation_icd), 0L, any_ventilation_icd))
+
+joined_df$any_ventilation_flowsheet = 1
+
+joined_df
+
+```
+
+
+```{r}
+
+# create confusion table
+confusion <- joined_df %>%
+  summarise(
+    TP = sum(any_proning_icd == 1 & proned == 1, na.rm = TRUE),
+    TN = sum(any_proning_icd == 0 & proned == 0, na.rm = TRUE),
+    FP = sum(any_proning_icd == 1 & proned == 0, na.rm = TRUE),
+    FN = sum(any_proning_icd == 0 & proned == 1, na.rm = TRUE)
+  )
+
+confusion
+
+# calculate sensitivity and specificity
+sensitivity <- confusion$TP / (confusion$TP + confusion$FN)
+specificity <- confusion$TN / (confusion$TN + confusion$FP)
+
+sensitivity
+specificity
+
+```
+
+
+
+```{r}
+library(dplyr)
+library(ggplot2)
+
+confusion_df_proning <- joined_df %>% 
+  count(proned, any_proning_icd) %>% 
+  rename(Count = n) %>%
+  complete(proned = c(0, 1), 
+           any_proning_icd = c(0, 1), 
+           fill = list(Count = 0))
+
+write_csv(confusion_df_proning, paste0(project_location, '/project_output/revision/icd/', site, '_proned_cf.csv'))
+
+plot_a <- ggplot(confusion_df_proning, aes(x = any_proning_icd, y = proned, fill = Count)) +
+  geom_tile(color = "white") +
+  geom_text(aes(label = Count), color = "blue", size = 6) +
+  scale_fill_gradient(low = "lightblue", high = "darkblue") +
+  scale_x_continuous(breaks = c(0, 1), labels = c("0", "1")) +
+  scale_y_continuous(breaks = c(0, 1), labels = c("0", "1")) +
+  labs(
+    title = "Proning Confusion Matrix",
+    x = "any_proning_icd_fill",
+    y = "proned flowsheet"
+  ) +
+  coord_fixed() +
+  theme_minimal(base_size = 10)
+plot_a
+```
+
+
+
+```{r}
+# create confusion matrix table
+
+
+confusion_df_vent <- joined_df %>% 
+  count(any_ventilation_flowsheet, any_ventilation_icd) %>% 
+  rename(Count = n) %>%
+  complete(any_ventilation_flowsheet = c(0, 1), 
+           any_ventilation_icd = c(0, 1), 
+           fill = list(Count = 0))
+
+write_csv(confusion_df_vent, paste0(project_location, '/project_output/revision/icd/', site, '_vent_cf.csv'))
+
+
+plot_b <- ggplot(confusion_df_vent, aes(x = any_ventilation_icd, y = any_ventilation_flowsheet, fill = Count)) +
+  geom_tile(color = "white") +
+  geom_text(aes(label = Count), color = "white", size = 6) +
+  scale_fill_gradient(low = "lightblue", high = "darkblue") +
+  scale_x_continuous(breaks = c(0, 1), labels = c("0", "1")) +
+  scale_y_continuous(breaks = c(0, 1), labels = c("0", "1")) +
+  labs(
+    title = "Ventilation Confusion Matrix",
+    x = "any_ventilation_icd",
+    y = "any_ventilation_flowsheet"
+  ) +
+  coord_fixed() +
+  theme_minimal(base_size = 10)
+plot_b
+
+```
+
+
+
+```{r}
+joined_df
+
+colnames(joined_df
+         )
+
+joined_df <- joined_df |>
+  mutate(
+    race_category = case_when(
+      race_category %in% c("Other", "Unknown") ~ "Other/Unknown",
+      TRUE ~ race_category
+    )
+  )
+
+library(tableone)
+
+# Define variables for TableOne
+
+to_tab <- c(
+  'age_at_admission',
+  'female',
+  'race_ethnicity',
+  'bmi',
+  'hospital_id',
+  'year',
+  'study_period',
+  'period_sarscov2',
+  'eligible_by_proseva',
+  'eligible_by_prone',
+  'admit_to_enrolled', 
+  'ett_to_enrolled',
+  'or_before_enrollment',
+  'min_pf_ratio',
+  'severe_ards',
+  'first_proseva_mode',
+  'first_proseva_peep',
+  'first_proseva_fio2',
+  'sofa_score',
+  'nee_pressor_dose',
+  "sofa_score", 
+  "prone_episodes",
+  "median_pt_prone_duration", 
+  "mean_pt_prone_duration",
+  "vent_duration_hours", 
+  "death_or_hospice"
+)
+
+#Factor Variables
+factors_tab <- c(
+  'female',
+  'race_ethnicity',
+  'hospital_id',
+  'year',
+  'study_period',
+  'period_sarscov2',
+  'or_before_enrollment',
+  'first_proseva_mode',
+  'nee_pressor_dose',
+  'severe_ards',
+  'eligible_by_proseva',
+  'eligible_by_prone',
+  "death_or_hospice"
+)
+
+# Create TableOne
+tableone_cohort <- CreateTableOne(
+  data=joined_df,
+  vars=to_tab, 
+  factorVars=factors_tab,
+  strata='proned', 
+  addOverall = T)
+
+# Print TableOne
+summary(tableone_cohort)
+table_list <- tab_decomp(tableone_cohort)
+table_list$continuous <- table_list$continuous |> mutate(strata=fcase(strata=='0', 'not_proned', strata=='1', 'proned', strata=='Overall', 'Overall'))
+table_list$categorical <- table_list$categorical |> mutate(strata=fcase(strata=='0', 'not_proned', strata=='1', 'proned', strata=='Overall', 'Overall'))
+write_csv(table_list$continuous, paste0(project_location, '/project_output/revision/icd/', site, '_tableone_cont.csv'))
+write_csv(table_list$categorical, paste0(project_location, '/project_output/revision/icd/', site, '_tableone_cat.csv'))
+
+```
+
+
+
+
+```{r}
+library(dplyr)
+library(ggplot2)
+library(tidyr)
+library(lubridate)
+
+# Summarize counts per year-quarter
+proning_quarter <- joined_df |>
+  mutate(
+    year = year(final_admission_dttm),
+    qtr = quarter(final_admission_dttm),
+    year_quarter = paste0(year, "-Q", qtr)
+  ) |>
+  group_by(year_quarter) |>
+  summarise(
+    any_proning_icd = sum(any_proning_icd, na.rm = TRUE),
+    proned = sum(proned, na.rm = TRUE),
+    .groups = "drop"
+  ) |>
+  pivot_longer(
+    cols = c(any_proning_icd, proned),
+    names_to = "proning_type",
+    values_to = "count"
+  )
+
+
+write_csv(proning_quarter, paste0(project_location, '/project_output/revision/icd/', site, '_proning_quarter.csv'))
+
+
+# Plot bar chart per quarter
+ggplot(proning_quarter, aes(x = year_quarter, y = count, fill = proning_type)) +
+  geom_col(position = "dodge") +
+  scale_fill_manual(values = c("any_proning_icd" = "steelblue", "proned" = "darkorange")) +
+  labs(
+    title = "Proning Counts per Quarter",
+    x = "Year-Quarter",
+    y = "Number of Patients",
+    fill = "Proning Type"
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+
+```
+
+
+```{r}
+library(ggplot2)
+library(dplyr)
+library(gridExtra)
+library(grid)
+
+# ============================================================================
+# PLOT A: PRONING CONFUSION MATRIX HEATMAP
+# ============================================================================
+
+confusion_df_proning <- joined_df %>% 
+  count(proned, any_proning_icd) %>% 
+  rename(Count = n) %>%
+  complete(proned = c(0, 1), 
+           any_proning_icd = c(0, 1), 
+           fill = list(Count = 0))
+
+plot_a <- ggplot(confusion_df_proning, aes(x = any_proning_icd, y = proned, fill = Count)) +
+  geom_tile(color = "white") +
+  geom_text(aes(label = Count), color = "blue", size = 6) +
+  scale_fill_gradient(low = "lightblue", high = "darkblue") +
+  scale_x_continuous(breaks = c(0, 1), labels = c("0", "1")) +
+  scale_y_continuous(breaks = c(0, 1), labels = c("0", "1")) +
+  labs(
+    title = "Proning Confusion Matrix",
+    x = "any_proning_icd_fill",
+    y = "proned flowsheet"
+  ) +
+  coord_fixed() +
+  theme_minimal(base_size = 10)
+
+# ============================================================================
+# PLOT B: VENTILATION CONFUSION MATRIX HEATMAP
+# ============================================================================
+
+confusion_df_vent <- joined_df %>% 
+  count(any_ventilation_flowsheet, any_ventilation_icd) %>% 
+  rename(Count = n) %>%
+  complete(any_ventilation_flowsheet = c(0, 1), 
+           any_ventilation_icd = c(0, 1), 
+           fill = list(Count = 0))
+
+plot_b <- ggplot(confusion_df_vent, aes(x = any_ventilation_icd, y = any_ventilation_flowsheet, fill = Count)) +
+  geom_tile(color = "white") +
+  geom_text(aes(label = Count), color = "white", size = 6) +
+  scale_fill_gradient(low = "lightblue", high = "darkblue") +
+  scale_x_continuous(breaks = c(0, 1), labels = c("0", "1")) +
+  scale_y_continuous(breaks = c(0, 1), labels = c("0", "1")) +
+  labs(
+    title = "Ventilation Confusion Matrix",
+    x = "any_ventilation_icd",
+    y = "any_ventilation_flowsheet"
+  ) +
+  coord_fixed() +
+  theme_minimal(base_size = 10)
+
+# ============================================================================
+# PLOT C: PRONING COUNTS PER QUARTER
+# ============================================================================
+
+plot_c <- ggplot(proning_quarter, aes(x = year_quarter, y = count, fill = proning_type)) +
+  geom_col(position = "dodge") +
+  scale_fill_manual(values = c("any_proning_icd" = "steelblue", "proned" = "darkorange")) +
+  labs(
+    title = "Proning Counts per Quarter",
+    x = "Year-Quarter",
+    y = "Number of Patients",
+    fill = "Proning Type"
+  ) +
+  theme_minimal(base_size = 10) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+# ============================================================================
+# COMBINE EVERYTHING AND SAVE AS PDF
+# ============================================================================
+
+grid.arrange(
+  plot_a,
+  plot_b,
+  plot_c,
+  layout_matrix = rbind(c(1, 2),
+                        c(3, 3)),
+  heights = c(1, 1)
+)
+
+dev.off()
+
+```
+
+```{r}
+
+pdf(paste0(project_location, '/project_output/revision/icd/', site, '_summary_figure.pdf'), width = 12, height = 8)
+
+grid.arrange(
+  plot_a,
+  plot_b,
+  plot_c,
+  layout_matrix = rbind(c(1, 2),
+                        c(3, 3)),
+  heights = c(1, 1)
+)
+
+dev.off()
+
+cat("\nSummary figure saved as '", paste0(project_location, '/project_output/revision/icd/', site, '_summary_figure.pdf'), "'\n", sep = "")
+```
+
