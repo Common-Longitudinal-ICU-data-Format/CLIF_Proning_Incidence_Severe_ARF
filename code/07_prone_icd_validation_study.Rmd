@@ -533,6 +533,10 @@ joined_df <- joined_df %>%
 joined_df <- joined_df %>%
   mutate(any_ventilation_icd = as.integer(vent_lt24h == 1 | vent_24_96h == 1 | vent_gt96h == 1),
          any_ventilation_icd = ifelse(is.na(any_ventilation_icd), 0L, any_ventilation_icd))
+
+joined_df$any_ventilation_flowsheet = 1
+
+joined_df
 ```
 
 
@@ -937,6 +941,8 @@ icd_only_summary <- icd_only_prone_qc_table %>%
 icd_only_summary
 
 ```
+
+
 ```{r}
 icd_only_prone_qc_table
 ```
