@@ -1,19 +1,27 @@
 ---
-title: "Analysis_00_prone_incidence_allsite_eda"
+title: "Analysis_03_prone_incidence_allsite_eda"
 author: "Chad Hochberg"
 date: "`r Sys.Date()`"
 output: html_document
 ---
 
+#This Script is Run at a Central Coordinating Site With Access to Summary Site-level Data
+
 #Specify Project Location and File Type
 ```{r}
-project_location <- '~/Library/CloudStorage/OneDrive-JohnsHopkins/Research Projects/CLIF/CLIF_Projects/ProneProjects/ProningEpi/ProneSevereARF_Output'
+project_location <- '/Users/chadhochberg/Library/CloudStorage/OneDrive-Johnshopkins/Research Projects/CLIF/CLIF_Projects/ProneProjects/ProningEpi/ProneSevereARF_Output_Revised'
 file_type <- 'csv'
 
 #Create Sub Folders within Project Folder
 # Check if the output directory exists; if not, create it
 if (!dir.exists(paste0(project_location, "/summary_analysis"))) {
   dir.create(paste0(project_location, "/summary_analysis"))
+}
+if (!dir.exists(paste0(project_location, "/summary_output"))) {
+  dir.create(paste0(project_location, "/summary_output"))
+}
+if (!dir.exists(paste0(project_location, "/summary_output/graphs"))) {
+  dir.create(paste0(project_location, "/summary_output/graphs"))
 }
 ```
 
@@ -49,7 +57,7 @@ select <- dplyr::select
 
 ```{r Vectors to Make File Names for Import}
 #List of Sites Participating
-sites <- c('Hopkins', 'NU', 'OHSU', 'Penn', 'U Michigan', 'RUSH', 'UMN', "Sunnybrook", "UCMC")
+sites <- c('hopkins', 'nu', 'ucmc', 'umn', 'rush', 'penn', 'ohsu', 'umich')
 
 #List of tables created by proning scripts - WITHOUT Site Name
 tables <- c("_Table1_by_Hospital", 
@@ -66,7 +74,12 @@ tables <- c("_Table1_by_Hospital",
             "_global_aggregate_pronerisk_by_outcome",
             "_global_aggregate_pronerisk_by_outcome_period",
             "_global_aggregate_expected_prone_wCOVID-Status_post",
-            "_global_aggregate_expected_prone_wCOVID-Status")
+            "_global_aggregate_expected_prone_wCOVID-Status",
+            "_adjusted_models",
+            "_adjusted_models_severe_ards",
+            "_adjusted_models_prone72",
+            "_adjusted_models_moderate_ards",
+            "_adjusted_models_ards_icd10s")
 
 # Combine sites and tables to create full table names
 site_tables <- as.vector(outer(sites, tables, paste, sep = ""))
@@ -224,15 +237,15 @@ prone_per_quarter <- prone_per_quarter |>
   ungroup() |>
   mutate(site_name= fcase(
     site == 'all_sites', 'Overall',
-    site == 'Hopkins', 'Hopkins',
-    site == 'UMN', 'U Minnesota',
-    site == 'Penn', 'U Penn',
-    site =='NU', 'Northwestern',
-    site =='U Michigan', 'U Michigan',
-    site == 'UCMC', 'U Chicago',
-    site == 'RUSH', 'Rush',
-    site == 'OHSU', 'OHSU',
-    site == 'Sunnybrook', 'Sunnybrook'),
+    site == 'hopkins', 'Hopkins',
+    site == 'umn', 'U Minnesota',
+    site == 'penn', 'U Penn',
+    site =='nu', 'Northwestern',
+    site =='umich', 'U Michigan',
+    site == 'ucmc', 'U Chicago',
+    site == 'rush', 'Rush',
+    site == 'ohsu', 'OHSU',
+    site == 'sunnybrook', 'Sunnybrook'),
     site_name = fct_reorder(paste0(site_name, ", n=", sample_size), sample_size, .desc = TRUE))
 
 # Define the range and labels for quarters
@@ -807,7 +820,7 @@ base_plot <- ggplot(subset(prone_per_quarter_covid, site =='all_sites'),
   annotate("text", x = 14.0, y = 505, label = 'COVID-19', size=3.3) +
   annotate("text", x = 21.667, y = 505, label = 'Post COVID-19', size=3.3) +
   theme_classic() +
-  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1, size=0.60),
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1),
      legend.position = c(0.155, 0.75),
         legend.text = element_text(size = 8),  # Smaller legend text
         legend.key.size = unit(0.9, "lines"),  # Smaller legend keys
@@ -898,10 +911,10 @@ tableone_master <- tableone_master |>
 
 #FOr Sites with Only Two STudy Periods Need to Correct Period Numbers for Summation
 new_data <- data.frame(
-  characteristic = rep('COVID', 3),
-  site = c('OHSU', 'RUSH', 'Sunnybrook'),
-  Overall = c('78 (59.5)', '165 (74.0)', '50 (40.3)'),
-  percent_missing = rep("", 3)
+  characteristic = rep('COVID', 1),
+  site = c('rush'),
+  Overall = c('157 (71.6)'),
+  percent_missing = rep("", 1)
 )
 
 tableone_master <- rbind(tableone_master, new_data) |>
@@ -909,6 +922,8 @@ tableone_master <- rbind(tableone_master, new_data) |>
     site=='Sunnybrook' & characteristic =='race_ethnicity = unknown (%)', 'unknown', characteristic)
   )
 ```
+
+
 
 ```{r Table 1 Wide - Second}
 #These are Cleaner Labels for the 'Characteristics' Variable
@@ -958,6 +973,7 @@ wide_table_scaffold <- c(
     "Pressure_Support/CPAP",
     "Pressure-Regulated-Volume-Control",
     "SIMV",
+    "Volume Support",
     "first_proseva_peep (mean (SD))",
     "first_proseva_fio2 (mean (SD))",
     "sofa_score (mean (SD))",
@@ -965,6 +981,7 @@ wide_table_scaffold <- c(
     "No Norepi",
     "LessThan0.01",
     "MoreThan0.10",
+    "APRV",
     "age_at_admission (mean (SD))",
     "female",
     "Race_ethnicity",
@@ -985,20 +1002,19 @@ wide_table_scaffold <- c(
     "severe_ards",
     "first_vent_mode",
     "AssistControl-VolumeControl",
+    "Pressure-Regulated-Volume-Control",
     "Pressure_Control",
     "Pressure_Support/CPAP",
-    "Pressure-Regulated-Volume-Control",
     "first_proseva_peep (mean (SD))",
     "first_proseva_fio2 (mean (SD))",
     "sofa_score (mean (SD))",
     "Norepi Equivalent",
-    "APRV",
-    "unknown_race",
-    #"Year",
-    "Pre_COVID",
-    "Pre_COVID_Testing",
+    "White, non-Hispanic",
+    "AssistControl-VolumeControl",
+    "Other_Vent_Mode",
     "Pressure_Control",
-    "Other_Vent_Mode"
+    "Pressure_Support/CPAP",
+    "SIMV"
     )
 
 # Create lookup vector
@@ -1011,6 +1027,7 @@ mapped_labels <- label_lookup[clean_vars]
 mapped_labels
 tableone_master$characteristic <- mapped_labels[tableone_master$characteristic]
 ```
+
 ```{r Work Towards an Overall Table}
 table1_work <- tableone_master |>
   rename(site_data=Overall) |>
@@ -1051,7 +1068,7 @@ table1_work <- tableone_master |>
   ungroup()
 
 table1 <- table1_work |>
-  filter(site=='Hopkins') |>
+  filter(site=='hopkins') |>
   mutate(site='Overall')
 ```
 
@@ -1403,6 +1420,7 @@ wide_table_scaffold <- c(
     "Pressure_Support/CPAP",
     "Pressure-Regulated-Volume-Control",
     "SIMV",
+    "Volume Support",
     "first_proseva_peep (mean (SD))",
     "first_proseva_fio2 (mean (SD))",
     "sofa_score (mean (SD))",
@@ -1410,6 +1428,7 @@ wide_table_scaffold <- c(
     "No Norepi",
     "LessThan0.01",
     "MoreThan0.10",
+    "APRV",
     "age_at_admission (mean (SD))",
     "female",
     "Race_ethnicity",
@@ -1430,19 +1449,19 @@ wide_table_scaffold <- c(
     "severe_ards",
     "first_vent_mode",
     "AssistControl-VolumeControl",
+    "Pressure-Regulated-Volume-Control",
     "Pressure_Control",
     "Pressure_Support/CPAP",
-    "Pressure-Regulated-Volume-Control",
     "first_proseva_peep (mean (SD))",
     "first_proseva_fio2 (mean (SD))",
     "sofa_score (mean (SD))",
     "Norepi Equivalent",
-    "APRV",
-    "unknown_race",
-    "Pre_COVID",
-    "Pre_COVID_Testing",
+    "White, non-Hispanic",
+    "AssistControl-VolumeControl",
+    "Other_Vent_Mode",
     "Pressure_Control",
-    "Other_Vent_Mode"
+    "Pressure_Support/CPAP",
+    "SIMV"
     )
 
 # Create lookup vector
@@ -1500,7 +1519,7 @@ table1_work_period <- table1_work_period |>
   ungroup()
 
 table1_period <- table1_work_period |>
-  filter(site=='Hopkins') |>
+  filter(site=='hopkins') |>
   mutate(site='Overall')
 ```
 
@@ -1842,5 +1861,214 @@ write.csv(global_aggregate_by_proned_period_sars, paste0(project_location, '/sum
 
 global_aggregate_by_proned_period_sars <- collate_tables('_global_aggregate_expected_prone_wCOVID-Status_post')
 write.csv(global_aggregate_by_proned_period_sars, paste0(project_location, '/summary_output/global_aggregate_by_proned_period_sars_post.csv'))
+```
+
+```{r Proning Practice Aggregate Table}
+#Collate Prone Outcome Per Period
+prone_practices <- collate_table_one_period("_Table_Prone_Outcomes_Period")  |>
+    mutate(characteristic = clean_characteristic(characteristic)) |>
+    filter(characteristic %in% 
+     c(
+      'n',
+      'proned = 1 (%)',
+      'prone_episodes (mean (SD))',
+      'first_prone_episode_hours (mean (SD))',
+      'median_pt_prone_duration (mean (SD))',
+      'mean_pt_prone_duration (mean (SD))',
+      'time_to_prone_hrs (mean (SD))'
+    ))
+
+#Go to Long FOrm
+table_prone_work_period <- prone_practices |>
+  pivot_longer(cols = c(`Pre-COVID`, COVID, `Post-COVID`),
+               names_to = 'period')
+
+table_prone_work_period <- table_prone_work_period |>
+  # Extract mean and SD using regex
+  mutate(value=trimws(value),
+         site_mean_count=as.numeric(sub("\\s*\\(.*", "", value)), # Gets the mean/count
+         site_sd_perc=as.numeric(sub(".*\\((.*)\\).*", "\\1", value))) |>
+  #Define a Column is a Mean or SD Column
+  mutate(mean_col=fifelse(
+            grepl('mean', characteristic, ignore.case=T), 1, 0)) |>
+  group_by(characteristic, period, mean_col) |>
+  mutate(count=fifelse(
+         mean_col==0, sum(site_mean_count, na.rm=T), NaN)
+  ) |>
+  #Calculate Proportion Each Site Contributes (for Weighted Averages)
+  group_by(site, period) |>
+  mutate(site_n=fifelse(characteristic=='proned = 1 (%)', site_mean_count, NaN),
+         site_n=sum(site_n, na.rm=T),
+         #Account for Missingness
+         percent_missing=as.numeric(percent_missing),
+         percent_missing=fifelse(is.na(percent_missing), 0, percent_missing),
+         value_n = site_n) |>
+  ungroup() |>
+  group_by(characteristic, period) |>
+  mutate(overall_n=sum(value_n, na.rm = TRUE),
+        weights = value_n / overall_n,
+        percent = fifelse(mean_col==0, round((count/overall_n)*100, 2), NaN)) |>
+   ungroup() |>
+  #Calculate Weighted Means by Period and Site - Checked and This Matches HMisc Function (wtd.mean)
+  group_by(characteristic, period) |>
+  mutate(weighted_mean=fifelse(
+    mean_col==1, round(sum(site_mean_count*weights, na.rm=T), 3), NaN)) |>
+  mutate(
+   pooled_sd = fifelse(
+     mean_col == 1,
+     round(sqrt(sum((value_n - 1) * site_sd_perc^2, na.rm = T) / 
+                 sum(value_n - 1, na.rm = T)), 2), NaN)) |>
+  ungroup()
+
+table_prone_practice_period <- table_prone_work_period  |>
+  filter(site=='hopkins') |>
+  mutate(site='Overall')
+```
+
+```{r Finalize Proning Practice Table}
+#Use Weighted ANOVA Function
+#Identify Columns For Weighted ANOVA (continuous Vars)
+mean_cols <- table_prone_practice_period$characteristic[table_prone_practice_period$mean_col==1]
+
+period_p_values <- weighted_anova_pval(table_prone_practice_period, mean_cols)
+
+table_prone_collated <- table_prone_practice_period |>
+  rbind(table_prone_work_period) |>
+  group_by(period) |>
+  mutate(value_n=fifelse(site=='Overall', overall_n, value_n),
+         site_mean_count=fifelse(site=='Overall' & mean_col==1, weighted_mean, site_mean_count),
+         site_mean_count=fifelse(site=='Overall' & mean_col==0, count, site_mean_count),
+         site_sd_perc=fifelse(site=='Overall' & mean_col==1, pooled_sd, site_sd_perc),
+         site_sd_perc=fifelse(site=='Overall' & mean_col==0, percent, site_sd_perc)) |>
+  select(-mean_col) |>
+  pivot_wider(
+    id_cols = c('characteristic'),
+    names_from = c('site', 'period'),
+    values_from = c('site_mean_count', 'site_sd_perc', 'value_n'),
+    names_glue = "{site}_{period}_{.value}"
+  ) |>
+  left_join(period_p_values) |>
+  relocate(
+    dplyr::starts_with('overall'), .after = characteristic
+  ) |>
+  group_by(characteristic) |>
+  slice_head(n=1) |>
+  ungroup()
+
+table_prone_formatted_period <- format_table1_for_reporting(table_prone_collated) |>
+  left_join(period_p_values) |>
+  group_by(characteristic) |>
+  slice_head(n=1) |>
+  select(-mean_col) |>
+  relocate(period_p_value, period_f_stat, .after = 'Overall_Post-COVID')
+
+#Same Order as Original Table
+final_prone_practice <- prone_practices |> 
+  filter(site=='hopkins') |>
+  select(characteristic) |> 
+  left_join(table_prone_formatted_period)
+
+write.csv(table1_formatted_period, paste0(project_location, '/summary_output/prone_practices_continuous.csv'))
+```
+
+```{r Prepare Data for Meta-analysis}
+primary_analysis <- collate_tables('_adjusted_models') |>
+  filter(term %in%
+           c('study_periodPost-COVID',
+             'study_periodPre-COVID',
+             'period_sarscov2COVID_SarsCov2Pos',
+             'period_sarscov2Post-COVID_SarsCov2Neg-Unk',
+             'period_sarscov2Post-COVID_SarsCov2Pos',
+             'period_sarscov2Pre-COVID',
+             'period_sarscov2_postCOVID_SarsCov2Pos',
+             'period_sarscov2_postPost-COVID',
+             'period_sarscov2_postPre-COVID'
+             )) |>
+  group_by(site, term) |>
+  arrange(site, V1) |>
+  slice_head(n=1) |>
+  arrange(site, V1) |>
+  ungroup() |>
+  mutate(analysis='primary')
+
+prone72 <- collate_tables('_adjusted_models_prone72') |>
+  filter(term %in%
+           c('study_periodPost-COVID',
+             'study_periodPre-COVID',
+             'period_sarscov2COVID_SarsCov2Pos',
+             'period_sarscov2Post-COVID_SarsCov2Neg-Unk',
+             'period_sarscov2Post-COVID_SarsCov2Pos',
+             'period_sarscov2Pre-COVID',
+             'period_sarscov2_postCOVID_SarsCov2Pos',
+             'period_sarscov2_postPost-COVID',
+             'period_sarscov2_postPre-COVID'
+             )) |>
+  group_by(site, term) |>
+  arrange(site, V1) |>
+  slice_head(n=1) |>
+  arrange(site, V1) |>
+  ungroup() |>
+  mutate(analysis='prone72')
+
+prone_severe <- collate_tables('_adjusted_models_severe_ards') |>
+  filter(term %in%
+           c('study_periodPost-COVID',
+             'study_periodPre-COVID',
+             'period_sarscov2COVID_SarsCov2Pos',
+             'period_sarscov2Post-COVID_SarsCov2Neg-Unk',
+             'period_sarscov2Post-COVID_SarsCov2Pos',
+             'period_sarscov2Pre-COVID',
+             'period_sarscov2_postCOVID_SarsCov2Pos',
+             'period_sarscov2_postPost-COVID',
+             'period_sarscov2_postPre-COVID'
+             )) |>
+  group_by(site, term) |>
+  arrange(site, V1) |>
+  slice_head(n=1) |>
+  arrange(site, V1) |>
+  ungroup() |>
+  mutate(analysis='severe_ards')
+
+prone_moderate <- collate_tables('_adjusted_models_moderate_ards') |>
+  filter(term %in%
+           c('study_periodPost-COVID',
+             'study_periodPre-COVID',
+             'period_sarscov2COVID_SarsCov2Pos',
+             'period_sarscov2Post-COVID_SarsCov2Neg-Unk',
+             'period_sarscov2Post-COVID_SarsCov2Pos',
+             'period_sarscov2Pre-COVID',
+             'period_sarscov2_postCOVID_SarsCov2Pos',
+             'period_sarscov2_postPost-COVID',
+             'period_sarscov2_postPre-COVID'
+             )) |>
+  group_by(site, term) |>
+  arrange(site, V1) |>
+  slice_head(n=1) |>
+  arrange(site, V1) |>
+  ungroup() |>
+  mutate(analysis='moderate_ards')
+
+prone_ards_icd10 <- collate_tables('_adjusted_models_ards_icd10s') |>
+  filter(term %in%
+           c('study_periodPost-COVID',
+             'study_periodPre-COVID',
+             'period_sarscov2COVID_SarsCov2Pos',
+             'period_sarscov2Post-COVID_SarsCov2Neg-Unk',
+             'period_sarscov2Post-COVID_SarsCov2Pos',
+             'period_sarscov2Pre-COVID',
+             'period_sarscov2_postCOVID_SarsCov2Pos',
+             'period_sarscov2_postPost-COVID',
+             'period_sarscov2_postPre-COVID'
+             )) |>
+  group_by(site, term) |>
+  arrange(site, V1) |>
+  slice_head(n=1) |>
+  arrange(site, V1) |>
+  ungroup() |>
+  mutate(analysis='ards_icd10')
+
+model_terms_meta <- rbind(primary_analysis, prone72, prone_severe, prone_moderate, prone_ards_icd10) |>
+  arrange(site, analysis, V1)
+write_csv(model_terms_meta, paste0(project_location, '/summary_output/model_terms_meta.csv'))
 ```
 

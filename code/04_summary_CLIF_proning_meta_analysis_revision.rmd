@@ -1,0 +1,315 @@
+---
+title: "04_summary_CLIF_Prone_MetaAnalysis"
+author: "Anna K. Barker and Chad H Hochberg"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+#This file conducts the random effects meta-analysis method of pooling individual site-level estimates for the CLIF prone positioning estimates across COVID periods
+```{r setup, include=FALSE}
+library(tidyverse)
+library(meta)
+library(metafor)
+library(dplyr)
+library(grid)
+
+setwd('/Users/chadhochberg/Library/CloudStorage/OneDrive-JohnsHopkins/Research Projects/CLIF/CLIF_Projects/ProneProjects/ProningEpi/ProneSevereARF_Output_Revised') #location of csv files
+project_location <- getwd()
+```
+
+```{r Open Meta Analysis File}
+#Open Meta Analysis Summary File
+model_terms_meta <- read_csv(paste0(project_location, '/summary_output/model_terms_meta.csv'))
+```
+
+```{r Primary Analysis - Three Periods}
+#random effects meta-analysis: 
+#12h proning; ref group COVID period
+#COVID vs pre-COVID periods
+#csv file with health system level results of outcomes (n, estimate, standard error)
+meta_primary <- model_terms_meta |> filter(analysis=='primary')
+meta_pre <- meta_primary %>% filter(term=='study_periodPre-COVID')|>  #only run analysis on hospitals with COVID and post-COVID data
+  mutate(estimate=estimate*-1) |> #Comparison for COVID vs Pre-COVID
+  arrange(n_observations)
+study.ids<- c("1", "2", "3", "4", "5", "6", "7")
+res<- rma(yi=meta_pre$estimate, sei=meta_pre$std_error, method = "REML", slab=study.ids)
+print('\n Meta-Analysis: COVID Period vs Pre-COVID \n')
+summary(res)
+meta1<- metagen(meta_pre$estimate , meta_pre$std_error , common=F, random=T, method.tau = "REML", sm="OR", studlab = study.ids)
+pdf(paste0(project_location, "/summary_output/graphs/meta_analysis_covid-pre_Primary.pdf"), width = 7.3, height = 5)
+forest(meta1, layout = "JAMA", backtransf = TRUE, names=study.ids)
+grid.text("Meta-Analysis: COVID Period vs Pre-COVID", 
+          x = 0.5, y = 0.95, 
+          gp = gpar(fontsize = 14, fontface = "bold"))
+grid.text("Favors \n Pre-Pandemic", x=.535, y=.8, gp=gpar(fontsize=10, fontface="bold"))
+grid.text("Favors \n Pandemic", x=.73, y=.8, gp=gpar(fontsize=10, fontface="bold"))
+dev.off()
+
+#COVID vs post-COVID periods
+meta_post<-  meta_primary %>% filter(term=='study_periodPost-COVID')|>  #only run analysis on hospitals with COVID and post-COVID data
+  mutate(estimate=estimate*-1) |> #Comparison for COVID vs Post-COVID
+  arrange(n_observations)
+study.ids<- c("1", "2", "3", "4", "5", "6", "7", "8")
+res<- rma(yi=meta_post$estimate, sei=meta_post$std_error, method = "REML", slab=study.ids)
+print('\n Meta-Analysis: COVID Period vs Post-COVID \n')
+summary(res)
+meta1<- metagen(TE=meta_post$estimate , seTE=meta_post$std_error , common=F, random=T, method.tau = "REML", sm="OR", studlab = study.ids)
+pdf(paste0(project_location, "/summary_output/graphs/meta_analysis_covid-post_Primary.pdf"), width = 7.3, height = 5)
+forest(meta1, layout = "JAMA", backtransf = TRUE, names=study.ids)
+grid.text("Meta-Analysis: COVID Period vs Post-COVID", 
+          x = 0.5, y = 0.95, 
+          gp = gpar(fontsize = 14, fontface = "bold"))
+grid.text("Favors \n Post-Pandemic", x=.535, y=.83, gp=gpar(fontsize=10, fontface="bold"))
+grid.text("Favors \n Pandemic", x=.73, y=.83, gp=gpar(fontsize=10, fontface="bold"))
+dev.off()
+```
+```{r Secondary Analysis - Including SARS-CoV2 Data}
+#12h proning; 4 categories: ref group non-SARS-CoV2 negative, during COVID period
+#COVID - vs pre-COVID
+meta_pre <-  meta_primary %>% filter(term=='period_sarscov2_postPre-COVID')|>  #only run analysis on hospitals with COVID and post-COVID data
+  mutate(estimate=estimate*-1) |> #Comparison for COVID vs Post-COVID
+  arrange(n_observations)
+study.ids<- c("1", "2", "3", "4", "5", "6", "7")
+res<- rma(yi=meta_pre$estimate, sei=meta_pre$std_error, method = "REML", slab=study.ids)
+print('\n Meta-Analysis: Pre-COVID vs COVID period (SARS-CoV2[-]) \n')
+summary(res)
+meta1<- metagen(TE=meta_pre$estimate , seTE=meta_pre$std_error , common=F, random=T, method.tau = "REML", sm="OR", studlab = study.ids)
+pdf(paste0(project_location, "/summary_output/graphs/meta_analysis_covid_sarsneg-pre.pdf"), width = 7.3, height = 5)
+forest(meta1, layout = "JAMA", backtransf = TRUE, names=study.ids)
+grid.text("Meta-Analysis: Pre-COVID vs COVID period (SARS-CoV2[-])", 
+          x = 0.5, y = 0.95, 
+          gp = gpar(fontsize = 14, fontface = "bold"))
+grid.text("Favors \n Pre-Pandemic", x=.535, y=.83, gp=gpar(fontsize=10, fontface="bold"))
+grid.text("Favors \n Pandemic", x=.73, y=.83, gp=gpar(fontsize=10, fontface="bold"))
+dev.off()
+
+#COVID + vs COVID - during COVID period
+meta <-  meta_primary %>% filter(term=='period_sarscov2_postCOVID_SarsCov2Pos')|>  #only run analysis on hospitals with COVID and post-COVID data
+  arrange(n_observations)
+study.ids<- c("1", "2", "3", "4", "5", "6", "7", "8")
+res<- rma(yi=meta$estimate, sei=meta$std_error, method = "REML", slab=study.ids)
+print('\n Meta-Analysis COVID Period: SARS-CoV2(-) vs SARS-CoV2(+) \n')
+summary(res)
+meta1<- metagen(TE=meta$estimate , seTE=meta$std_error , common=F, random=T, method.tau = "REML", sm="OR", studlab = study.ids)
+pdf(paste0(project_location, "/summary_output/graphs/meta_analysis_covid_pos_v_neg_covid_period.pdf"), width = 7.3, height = 5)
+forest(meta1, layout = "JAMA", backtransf = TRUE, names=study.ids)
+grid.text("Meta-Analysis COVID Period: SARS-CoV2(-) vs SARS-CoV2(+)", 
+          x = 0.5, y = 0.95, 
+          gp = gpar(fontsize = 14, fontface = "bold"))
+grid.text("Favors \n SARS-CoV2+", x=.535, y=.83, gp=gpar(fontsize=10, fontface="bold"))
+grid.text("Favors \n SARS-CoV2-", x=.73, y=.83, gp=gpar(fontsize=10, fontface="bold"))
+dev.off()
+
+#COVID - vs post-COVID
+meta <-  meta_primary %>% filter(term=='period_sarscov2_postPost-COVID')|>  #only run analysis on hospitals with COVID and post-COVID data
+  mutate(estimate=estimate*-1) |>
+  arrange(n_observations)
+study.ids<- c("1", "2", "3", "4", "5", "6", "7", "8")
+res<- rma(yi=meta$estimate, sei=meta$std_error, method = "REML", slab=study.ids)
+print('\n Meta-Analysis: Post-COVID vs COVID;SARS-CoV2(-) ')
+summary(res)
+meta1<- metagen(TE=meta$estimate , seTE=meta$std_error , common=F, random=T, method.tau = "REML", sm="OR", studlab = study.ids)
+pdf(paste0(project_location, "/summary_output/graphs/meta_analysis_post_covid_sarsneg.pdf"), width = 7.3, height = 5)
+forest(meta1, layout = "JAMA", backtransf = TRUE, names=study.ids)
+grid.text("Meta-Analysis: Post-COVID vs COVID;SARS-CoV2(-)", 
+          x = 0.5, y = 0.95, 
+          gp = gpar(fontsize = 14, fontface = "bold"))
+grid.text("Favors \n Post-COVID", x=.535, y=.83, gp=gpar(fontsize=10, fontface="bold"))
+grid.text("Favors \n COVID-", x=.73, y=.83, gp=gpar(fontsize=10, fontface="bold"))
+dev.off()
+```
+
+```{r Sensitivity Analysis - Severe ARDS}
+#severe ARDS, subset of patients with p/f<100 
+meta_severe <- model_terms_meta |> filter(analysis=='severe_ards')
+#COVID vs Pre
+meta <- meta_severe %>% filter(term=='study_periodPre-COVID') |>
+  mutate(estimate=estimate*-1) |> #Comparison for COVID vs Pre-COVID
+  arrange(n_observations)
+res<- rma(yi=meta$estimate, sei=meta$std_error, method = "REML")
+print('\n Meta-Analysis, Severe ARDS Only: Pre-COVID vs COVID \n')
+summary(res)
+meta1<- metagen(meta$estimate , meta$std_error, common=F, random=T, method.tau = "REML", sm="OR")
+pdf(paste0(project_location, "/summary_output/graphs/meta_analysis_covid-pre_Severe.pdf"), width = 7.3, height = 5)
+forest(meta1, layout = "JAMA", backtransf = TRUE)
+grid.text("Meta-Analysis, Severe ARDS Only: Pre-COVID vs COVID", 
+          x = 0.5, y = 0.95, 
+          gp = gpar(fontsize = 14, fontface = "bold"))
+grid.text("Favors \n Pre-COVID", x=.535, y=.83, gp=gpar(fontsize=10, fontface="bold"))
+grid.text("Favors \n COVID-", x=.73, y=.83, gp=gpar(fontsize=10, fontface="bold"))
+dev.off()
+
+#Severe ARDS: COVID vs Post
+meta <- meta_severe %>% filter(term=='study_periodPost-COVID') |>
+  mutate(estimate=estimate*-1) |> #Comparison for COVID vs Pre-COVID
+  arrange(n_observations)
+res<- rma(yi=meta$estimate, sei=meta$std_error, method = "REML")
+print('\n Meta-Analysis, Severe ARDS Only: Post-COVID vs COVID \n')
+summary(res)
+meta1<- metagen(meta$estimate , meta$std_error, common=F, random=T, method.tau = "REML", sm="OR")
+pdf(paste0(project_location, "/summary_output/graphs/meta_analysis_covid-post_Severe.pdf"), width = 7.3, height = 5)
+forest(meta1, layout = "JAMA", backtransf = TRUE)
+grid.text("Meta-Analysis, Severe ARDS Only: Post-COVID vs COVID", 
+          x = 0.5, y = 0.95, 
+          gp = gpar(fontsize = 14, fontface = "bold"))
+grid.text("Favors \n Post-COVID", x=.535, y=.83, gp=gpar(fontsize=10, fontface="bold"))
+grid.text("Favors \n COVID-", x=.73, y=.83, gp=gpar(fontsize=10, fontface="bold"))
+dev.off()
+```
+
+```{r Sensitivity Analysis - Moderate ARDS}
+#severe ARDS, subset of patients with p/f<100 
+meta_moderate <- model_terms_meta |> filter(analysis=='moderate_ards')
+#COVID vs Pre
+meta <- meta_moderate %>% filter(term=='study_periodPre-COVID') |>
+  mutate(estimate=estimate*-1) |> #Comparison for COVID vs Pre-COVID
+  arrange(n_observations)
+res<- rma(yi=meta$estimate, sei=meta$std_error, method = "REML")
+print('\n Meta-Analysis, Moderate ARDS Only: Pre-COVID vs COVID \n')
+summary(res)
+meta1<- metagen(meta$estimate , meta$std_error, common=F, random=T, method.tau = "REML", sm="OR")
+pdf(paste0(project_location, "/summary_output/graphs/meta_analysis_covid-pre_Moderate.pdf"), width = 7.3, height = 5)
+forest(meta1, layout = "JAMA", backtransf = TRUE)
+grid.text("Meta-Analysis, Moderate ARDS Only: Pre-COVID vs COVID", 
+          x = 0.5, y = 0.95, 
+          gp = gpar(fontsize = 14, fontface = "bold"))
+grid.text("Favors \n Pre-COVID", x=.535, y=.83, gp=gpar(fontsize=10, fontface="bold"))
+grid.text("Favors \n COVID-", x=.73, y=.83, gp=gpar(fontsize=10, fontface="bold"))
+dev.off()
+
+#Severe ARDS: COVID vs Post
+meta <- meta_moderate %>% filter(term=='study_periodPost-COVID') |>
+  mutate(estimate=estimate*-1) |> #Comparison for COVID vs Pre-COVID
+  arrange(n_observations)
+res<- rma(yi=meta$estimate, sei=meta$std_error, method = "REML")
+print('\n Meta-Analysis, Moderate ARDS Only: Post-COVID vs COVID \n')
+summary(res)
+meta1<- metagen(meta$estimate , meta$std_error, common=F, random=T, method.tau = "REML", sm="OR")
+pdf(paste0(project_location, "/summary_output/graphs/meta_analysis_covid-post_Moderate.pdf"), width = 7.3, height = 5)
+forest(meta1, layout = "JAMA", backtransf = TRUE)
+grid.text("Meta-Analysis, Moderate ARDS Only: Post-COVID vs COVID", 
+          x = 0.5, y = 0.95, 
+          gp = gpar(fontsize = 14, fontface = "bold"))
+grid.text("Favors \n Post-COVID", x=.535, y=.83, gp=gpar(fontsize=10, fontface="bold"))
+grid.text("Favors \n COVID-", x=.73, y=.83, gp=gpar(fontsize=10, fontface="bold"))
+dev.off()
+```
+```{r Sensitivity Analysis - 72 Hour Proning Outcome}
+#random effects meta-analysis: 
+#12h proning; ref group COVID period
+#COVID vs pre-COVID periods
+#csv file with health system level results of outcomes (n, estimate, standard error)
+meta_72 <- model_terms_meta |> filter(analysis=='prone72')
+meta_pre <- meta_72 %>% filter(term=='study_periodPre-COVID')|>  #only run analysis on hospitals with COVID and post-COVID data
+  mutate(estimate=estimate*-1) |> #Comparison for COVID vs Pre-COVID
+  arrange(n_observations)
+study.ids<- c("1", "2", "3", "4", "5", "6", "7")
+res<- rma(yi=meta_pre$estimate, sei=meta_pre$std_error, method = "REML", slab=study.ids)
+print('\n Meta-Analysis (72 Hour Proning(: COVID Period vs Pre-COVID \n')
+summary(res)
+meta1<- metagen(meta_pre$estimate , meta_pre$std_error , common=F, random=T, method.tau = "REML", sm="OR", studlab = study.ids)
+pdf(paste0(project_location, "/summary_output/graphs/meta_analysis_covid-pre_prone72.pdf"), width = 7.3, height = 5)
+forest(meta1, layout = "JAMA", backtransf = TRUE, names=study.ids)
+grid.text("Meta-Analysis (72 Hour Proning): COVID Period vs Pre-COVID", 
+          x = 0.5, y = 0.95, 
+          gp = gpar(fontsize = 14, fontface = "bold"))
+grid.text("Favors \n Pre-Pandemic", x=.535, y=.8, gp=gpar(fontsize=10, fontface="bold"))
+grid.text("Favors \n Pandemic", x=.73, y=.8, gp=gpar(fontsize=10, fontface="bold"))
+dev.off()
+
+#COVID vs post-COVID periods
+meta_post<-  meta_72 %>% filter(term=='study_periodPost-COVID')|>  #only run analysis on hospitals with COVID and post-COVID data
+  mutate(estimate=estimate*-1) |> #Comparison for COVID vs Post-COVID
+  arrange(n_observations)
+study.ids<- c("1", "2", "3", "4", "5", "6", "7", "8")
+res<- rma(yi=meta_post$estimate, sei=meta_post$std_error, method = "REML", slab=study.ids)
+print('\n Meta-Analysis (72 Hour Proning: COVID Period vs Post-COVID \n')
+summary(res)
+meta1<- metagen(TE=meta_post$estimate , seTE=meta_post$std_error , common=F, random=T, method.tau = "REML", sm="OR", studlab = study.ids)
+pdf(paste0(project_location, "/summary_output/graphs/meta_analysis_covid-post_prone72.pdf"), width = 7.3, height = 5)
+forest(meta1, layout = "JAMA", backtransf = TRUE, names=study.ids)
+grid.text("Meta-Analysis (72 Hour Proning): COVID Period vs Post-COVID", 
+          x = 0.5, y = 0.95, 
+          gp = gpar(fontsize = 14, fontface = "bold"))
+grid.text("Favors \n Post-Pandemic", x=.535, y=.83, gp=gpar(fontsize=10, fontface="bold"))
+grid.text("Favors \n Pandemic", x=.73, y=.83, gp=gpar(fontsize=10, fontface="bold"))
+dev.off()
+```
+
+```{r Sensitivity Analysis - Health Systems with All Periods}
+meta_all_period <- model_terms_meta |>
+  filter(!site %in% c('rush', 'sunnybrook'),
+         analysis=='primary')
+
+meta_pre <- meta_all_period %>% filter(term=='study_periodPre-COVID')|>  #only run analysis on hospitals with COVID and post-COVID data
+  mutate(estimate=estimate*-1) |> #Comparison for COVID vs Pre-COVID
+  arrange(n_observations)
+study.ids<- c("1", "2", "3", "4", "5", "6", "7")
+res<- rma(yi=meta_pre$estimate, sei=meta_pre$std_error, method = "REML", slab=study.ids)
+print('\n Meta-Analysis, Sites with All Periods: COVID Period vs Pre-COVID \n')
+summary(res)
+meta1<- metagen(meta_pre$estimate , meta_pre$std_error , common=F, random=T, method.tau = "REML", sm="OR", studlab = study.ids)
+pdf(paste0(project_location, "/summary_output/graphs/meta_analysis_covid-pre_sites_all_periods.pdf"), width = 7.3, height = 5)
+forest(meta1, layout = "JAMA", backtransf = TRUE, names=study.ids)
+grid.text("Meta-Analysis, Sites with All Periods: COVID Period vs Pre-COVID", 
+          x = 0.5, y = 0.95, 
+          gp = gpar(fontsize = 14, fontface = "bold"))
+grid.text("Favors \n Pre-Pandemic", x=.535, y=.8, gp=gpar(fontsize=10, fontface="bold"))
+grid.text("Favors \n Pandemic", x=.73, y=.8, gp=gpar(fontsize=10, fontface="bold"))
+dev.off()
+
+#COVID vs post-COVID periods
+meta_post<-  meta_all_period %>% filter(term=='study_periodPost-COVID')|>  #only run analysis on hospitals with COVID and post-COVID data
+  mutate(estimate=estimate*-1) |> #Comparison for COVID vs Post-COVID
+  arrange(n_observations)
+study.ids<- c("1", "2", "3", "4", "5", "6", "7")
+res<- rma(yi=meta_post$estimate, sei=meta_post$std_error, method = "REML", slab=study.ids)
+print('\n Meta-Analysis, Sites with All Periods: COVID Period vs Post-COVID \n')
+summary(res)
+meta1<- metagen(TE=meta_post$estimate , seTE=meta_post$std_error , common=F, random=T, method.tau = "REML", sm="OR", studlab = study.ids)
+pdf(paste0(project_location, "/summary_output/graphs/meta_analysis_covid-post_sites_all_periods.pdf"), width = 7.3, height = 5)
+forest(meta1, layout = "JAMA", backtransf = TRUE, names=study.ids)
+grid.text("Meta-Analysis: COVID Period vs Post-COVID", 
+          x = 0.5, y = 0.95, 
+          gp = gpar(fontsize = 14, fontface = "bold"))
+grid.text("Favors \n Post-Pandemic", x=.535, y=.83, gp=gpar(fontsize=10, fontface="bold"))
+grid.text("Favors \n Pandemic", x=.73, y=.83, gp=gpar(fontsize=10, fontface="bold"))
+dev.off()
+```
+```{r Sensitivity Analysis - ICD-10 ARDS Only}
+meta_icd <- model_terms_meta |> filter(analysis=='ards_icd10')
+meta_pre <- meta_icd %>% filter(term=='study_periodPre-COVID')|>  #only run analysis on hospitals with COVID and post-COVID data
+  mutate(estimate=estimate*-1) |> #Comparison for COVID vs Pre-COVID
+  arrange(n_observations)
+res<- rma(yi=meta_pre$estimate, sei=meta_pre$std_error, method = "REML")
+print('\n Meta-Analysis, ICD-10 Only: COVID Period vs Pre-COVID \n')
+summary(res)
+meta1<- metagen(meta_pre$estimate , meta_pre$std_error , common=F, random=T, method.tau = "REML", sm="OR")
+pdf(paste0(project_location, "/summary_output/graphs/meta_analysis_covid-pre_icd10.pdf"), width = 7.3, height = 5)
+forest(meta1, layout = "JAMA", backtransf = TRUE)
+grid.text("Meta-Analysis, ICD-10 Only: COVID Period vs Pre-COVID", 
+          x = 0.5, y = 0.95, 
+          gp = gpar(fontsize = 14, fontface = "bold"))
+grid.text("Favors \n Pre-Pandemic", x=.535, y=.8, gp=gpar(fontsize=10, fontface="bold"))
+grid.text("Favors \n Pandemic", x=.73, y=.8, gp=gpar(fontsize=10, fontface="bold"))
+dev.off()
+
+#COVID vs post-COVID periods
+meta_post<-  meta_icd %>% filter(term=='study_periodPost-COVID')|>  #only run analysis on hospitals with COVID and post-COVID data
+  mutate(estimate=estimate*-1) |> #Comparison for COVID vs Post-COVID
+  arrange(n_observations)
+study.ids<- c("1", "2", "3", "4", "5", "6", "7", "8")
+res<- rma(yi=meta_post$estimate, sei=meta_post$std_error, method = "REML")
+print('\n Meta-Analysis, ICD-only: COVID Period vs Post-COVID \n')
+summary(res)
+meta1<- metagen(TE=meta_post$estimate , seTE=meta_post$std_error , common=F, random=T, method.tau = "REML", sm="OR")
+pdf(paste0(project_location, "/summary_output/graphs/meta_analysis_covid-post_icd10.pdf"), width = 7.3, height = 5)
+forest(meta1, layout = "JAMA", backtransf = TRUE, names=study.ids)
+grid.text("Meta-Analysis, ICD-10 Only: COVID Period vs Post-COVID", 
+          x = 0.5, y = 0.95, 
+          gp = gpar(fontsize = 14, fontface = "bold"))
+grid.text("Favors \n Post-Pandemic", x=.535, y=.83, gp=gpar(fontsize=10, fontface="bold"))
+grid.text("Favors \n Pandemic", x=.73, y=.83, gp=gpar(fontsize=10, fontface="bold"))
+dev.off()
+```
+
