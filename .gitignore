@@ -10,9 +10,10 @@
 ## ignore the renv initialization file
 initialize_renv.R
 
-## ignore filtered CLIF tables stored as Rdata
+## ignore filtered CLIF tables stored as Rdata or .html files from Rmarkdown output
 *.RData
 *.parquet
+*.html
 
 #ignore source CLIF_ files 
 CLIF_*.parquet
