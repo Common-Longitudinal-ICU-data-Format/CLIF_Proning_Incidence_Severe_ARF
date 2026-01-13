@@ -437,7 +437,7 @@ proning_icd
 ```
 
 ```{r}
-ventilation_icd <- open_dataset(paste0(tables_location, "/clif_patient_procedures.parquet")) |>
+ventilation_icd <- open_dataset(paste0(tables_location, "/", larger_proning_table, ".parquet"))|>
   mutate(hospitalization_id = as.character(hospitalization_id)) |>
   dplyr::semi_join(cohort_hospitalization_ids, by = "hospitalization_id") |>
   dplyr::left_join(
