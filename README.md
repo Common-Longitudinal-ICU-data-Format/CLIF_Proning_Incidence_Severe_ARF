@@ -2,7 +2,8 @@
 
 ## Objective
 
-Evaluate the Incidence of Prone Positioning for Patients with Severe Hypoxemic Respiratory Failure Over Time Using the Common Longitudinal ICU Format (CLIF)
+Primary: Evaluate the Incidence of Prone Positioning for Patients with Severe Hypoxemic Respiratory Failure Over Time Using the Common Longitudinal ICU Format (CLIF)
+Secondary: Evaluate uptake of prone ventilation ICD-10 documentation compared to gold standard of flowsheet documentation of prone ventilation. 
 
 ## Required CLIF tables and fields
 
@@ -18,11 +19,13 @@ The following tables are required:
 4. **labs**: `hospitalization_id`, `lab_result_dttm`, `lab_category`, `lab_value`
    - `lab_category` = 'po2_arterial', 'creatinine', 'bilirubin'
 5. **medication_admin_continuous**: `hospitalization_id`, `admin_dttm`, `med_name`, `med_category`, `med_dose`, `med_dose_unit`
-   - `med_category` = "norepinephrine", "epinephrine", "phenylephrine", "vasopressin", "dopamine", "angiotensin", "cisatracurium"
+   - `med_category` = "norepinephrine", "epinephrine", "phenylephrine", "vasopressin", "dopamine", "angiotensin", "cisatracurium", "rocuronium", "vecuronium", "fentanyl", "morphine", "hydromorphone", "ketamine", "nitric_oxide", "epoprostenol"
 6. **respiratory_support**: `hospitalization_id`, `recorded_dttm`, `device_category`, `mode_category`, `tracheostomy`, `fio2_set`, `peep_set`
 7. **position**: `hospitalization_id`, `recorded_dttm`, `position_category`
 8. **microbiology_nonculture**:'patient_id', and sars_cov2 tests
 9. **patient_assessments**:'hospitalization_id', 'rass'
+10. **patient_procedures**: 'hospitalization_id', 'procedure_code', 'procedure_code_format'
+11. **hospital_diagnosis**: 'hospitalization_id', 
 
 
 ## Cohort identification
@@ -56,7 +59,7 @@ i. If a patient’s first ADT observation is not the ED (location_category!=’E
 3. Will output prone_outcomes.csv table that includes site-specific aggregate proning cohort data per month.
 4. Will output results of regression models, for use in aggregative cross-federation analysis.  
 
-## Detailed Instructions for running the project
+## Detailed Instructions for running the project: Scripts are identified with '..local...' or '..summary...' designations. Local scripts are scripts that are run within each site on patient level data. Summary scripts take site-level summary data (not patient information) and perform federated analysis and pooling of estimates.
 
 ## 1. Update config_tempate.yaml to conflig.yaml to reflect local details
 Required elements are: clif_data_path project_path file_type
@@ -69,12 +72,13 @@ Can run both scripts as R markdown files with the 'knit' function in R
 
 ## 3. Upload summary results from the project_output (tables and graphs) to the UChicago Box Folder. 
 
-## 4. Once all participating sites hvae rund scripts 00 and 01, lead investigators generate global coefficients for proning covariates. THEN will ask that each site run a third script to generate risk-adjusted rates of proning by hospital and period. 
-3. Run local proning prediction script with globaly estimated coefficients: 02_local_CLIF_prone_incidence_global_risk_adjustment.Rmd
+## 4. Once all participating sites hvae rund scripts 00 and 01, lead investigators generate global coefficients for proning covariates. THEN will ask that each site run a third script to generate risk-adjusted rates of proning by hospital and period, and remaining scripts with additional analyses
+- Run local proning prediction script with globaly estimated coefficients: 02_local_CLIF_prone_incidence_global_risk_adjustment.Rmd
+- Additionally: run scripts '06...', and '07...'
 
 ## 4. Lead Investigators than Run Analytic Scripts to Accomplish Exploratory Data analysis, summary random effects meta-analysis and bayesian hierarchical models. 
 1. 03_summary_CLIF_prone_incidence_allsite_eda.Rmd (generates data for Tables 1 and 2, Figure 1)
-2. 04_summary_CLIF_proning_meta_analysis.R
+2. 04_summary_CLIF_proning_meta_analysis.Rmd
 3. 05_summary_CLIF_prone_incidence_bayesian_hierarchical.Rmd (generates data for Figure 3)
 
 ---
