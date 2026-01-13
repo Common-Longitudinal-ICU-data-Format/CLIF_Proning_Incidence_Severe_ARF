@@ -1,8 +1,0 @@
-OS: Linux
-CPU: Intel(R) Xeon(R) Platinum 8168 CPU @ 2.70GHz
-Threads: 6
-RAM(GB): 754
-GPU count: 2
-GPU: NVIDIA-SMI has failed because it couldn't communicate with the NVIDIA driver. Make sure that the latest NVIDIA driver is installed and running. | VRAM(GB): 0
-GPU:  | VRAM(GB): 0
-CUDA:
