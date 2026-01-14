@@ -214,7 +214,7 @@ fn.timezone_tolocal <- function(df) {
 ```
 
 
-```{r Function to Decompose Table 1 Summaries for 'Easy' Pooling}
+```{r Function to Decompose Table 1 Summaries for Easy Pooling}
 tab_decomp <- function(table) {
   
   results_list <- list()  # Prepare an empty list to store results
