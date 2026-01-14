@@ -96,8 +96,8 @@ forest(meta1, layout = "JAMA", backtransf = TRUE, names=study.ids)
 grid.text("Meta-Analysis COVID Period: SARS-CoV2(-) vs SARS-CoV2(+)", 
           x = 0.5, y = 0.95, 
           gp = gpar(fontsize = 14, fontface = "bold"))
-grid.text("Favors \n SARS-CoV2+", x=.535, y=.83, gp=gpar(fontsize=10, fontface="bold"))
-grid.text("Favors \n SARS-CoV2-", x=.73, y=.83, gp=gpar(fontsize=10, fontface="bold"))
+grid.text("Favors \n SARS-CoV2-", x=.535, y=.83, gp=gpar(fontsize=10, fontface="bold"))
+grid.text("Favors \n SARS-CoV2+", x=.73, y=.83, gp=gpar(fontsize=10, fontface="bold"))
 dev.off()
 
 #COVID - vs post-COVID
@@ -111,11 +111,11 @@ summary(res)
 meta1<- metagen(TE=meta$estimate , seTE=meta$std_error , common=F, random=T, method.tau = "REML", sm="OR", studlab = study.ids)
 pdf(paste0(project_location, "/summary_output/graphs/meta_analysis_post_covid_sarsneg.pdf"), width = 7.3, height = 5)
 forest(meta1, layout = "JAMA", backtransf = TRUE, names=study.ids)
-grid.text("Meta-Analysis: Post-COVID vs COVID;SARS-CoV2(-)", 
+grid.text("Meta-Analysis: Post-COVID vs COVID with SARS-CoV2(-)", 
           x = 0.5, y = 0.95, 
           gp = gpar(fontsize = 14, fontface = "bold"))
 grid.text("Favors \n Post-COVID", x=.535, y=.83, gp=gpar(fontsize=10, fontface="bold"))
-grid.text("Favors \n COVID-", x=.73, y=.83, gp=gpar(fontsize=10, fontface="bold"))
+grid.text("Favors \n COVID-Period \n (SARS-CoV2[-])", x=.73, y=.83, gp=gpar(fontsize=10, fontface="bold"))
 dev.off()
 ```
 

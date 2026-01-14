@@ -579,7 +579,8 @@ all_site <- prone_per_quarter_covid[prone_per_quarter_covid$site == 'all_sites',
          ymax = proned_12_hr_percent + (1.96 * standard_error_12),
          ymin = fifelse(ymin<0, 0, ymin),
          ymax = fifelse(ymax>1.0, 1, ymax),
-         sars_cov2_positive=fifelse(sars_cov2_positive=='Not COVID', 'No/Unknown/Pre-COVID', 'Positive'))
+         sars_cov2_positive=fifelse(sars_cov2_positive=='Not COVID', 'No/Unknown/Pre-Pandemic', 'SARS-CoV2 Positive')) |>
+  mutate(sars_cov2_positive = factor(sars_cov2_positive, levels = c('SARS-CoV2 Positive', 'No/Unknown/Pre-Pandemic')))
 
 base_plot <- ggplot(all_site, aes(x=study_quarter, y=proned_12_hr_percent)) +
   #Error bars for "all_sites" data by COVID Status
@@ -588,12 +589,6 @@ base_plot <- ggplot(all_site, aes(x=study_quarter, y=proned_12_hr_percent)) +
                 width = 0.20, linewidth = 1.05, alpha=0.5) +
   geom_point(aes(color= sars_cov2_positive)) +
   geom_line(aes(group=sars_cov2_positive, color=sars_cov2_positive)) +
-  # Adjust legend font sizes in theme
-  theme(
-    legend.text = element_text(size = 14),   # Increase font size for linetype legend text
-    legend.title = element_text(size = 14),  # Increase font size for linetype legend title
-    legend.title.align = 0,  # Aligns legend title to left for clarity
-  ) +
   # Y-axis for proning percentage and X-axis for study quarter with custom labels and limits
   scale_y_continuous(breaks = seq(0, 1, by = 0.1), 
                      labels = scales::percent, 
@@ -610,9 +605,17 @@ base_plot <- ggplot(all_site, aes(x=study_quarter, y=proned_12_hr_percent)) +
   annotate("text", x = 13.667, y = 1.025, label = 'COVID-19') +
   annotate("text", x = 22.667, y = 1.025, label = 'Post COVID-19') +
   theme_classic() +
+  # Adjust legend font sizes in theme
+  theme(
+    legend.position = c(0.14, 0.6),  # Centered horizontally and positioned at the bottom of the plot
+    legend.justification = c("center", "bottom"),  # Justification for the legend
+    legend.text = element_text(size = 10),   # Increase font size for linetype legend text
+    legend.title = element_text(size = 10),  # Increase font size for linetype legend title
+    legend.title.align = 0,  # Aligns legend title to left for clarity
+  ) +
   theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1)) +
-  scale_color_met_d('Isfahan1', direction =-1) +
-  guides(color = guide_legend(title = 'SARS-CoV2 Status'))
+  scale_color_met_d('Isfahan1', direction = -1) +
+  guides(color = guide_legend(title = ''))
 base_plot
 
 ggsave(
@@ -625,6 +628,7 @@ ggsave(
 )
 
 ```
+
 ```{r Period and SARS-Cov2 Figure With Post COVID SARS Pos in Quarters Given Sparse Data}
 prone_summary_custom <- collate_tables("_prone_per_quarter-sarscoV2_status")  
 
