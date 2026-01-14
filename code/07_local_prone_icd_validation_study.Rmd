@@ -7,6 +7,14 @@ output: html_document
 
 
 ```{r setup, include=FALSE}
+# Detach tidytable if it is loaded
+if ("package:tidytable" %in% search()) {
+  detach("package:tidytable", unload = TRUE)
+  cat("tidytable has been detached\n")
+} else {
+  cat("tidytable was not loaded\n")
+}
+
 packages <- c("lubridate", 
               "tidyverse", 
               "dplyr",
@@ -156,7 +164,7 @@ fn.timezone_tolocal <- function(df) {
   
   #Now Convert DateTime Columns to Local Timezone
   df <- df %>%
-    mutate(across(all_of(datetime_cols), ~ cast(.x, arrow::timestamp("us", site_time_zone)))) |>
+    mutate(dplyr::across(dplyr::all_of(datetime_cols), ~ cast(.x, arrow::timestamp("us", site_time_zone)))) |>
     compute()
 }
 ```

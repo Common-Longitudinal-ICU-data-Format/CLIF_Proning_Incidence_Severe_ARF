@@ -13,7 +13,9 @@ packages <- c("lubridate",
               "readr", 
               "arrow", 
               "collapse", 
-              "data.table") #Predictions and Average Slopes for Average Marginal Effects
+              "data.table",
+              "rprojroot",
+              "yaml") #Predictions and Average Slopes for Average Marginal Effects
 
 install_if_missing <- function(package) {
   if (!require(package, character.only = TRUE)) {
