@@ -31,7 +31,7 @@ meta_primary <- model_terms_meta |> filter(analysis=='primary')
 meta_pre <- meta_primary %>% filter(term=='study_periodPre-COVID')|>  #only run analysis on hospitals with COVID and post-COVID data
   mutate(estimate=estimate*-1) |> #Comparison for COVID vs Pre-COVID
   arrange(n_observations)
-study.ids<- c("1", "2", "3", "4", "5", "6", "7")
+study.ids<- c("1", "2", "3", "4", "5", "6", "7", "8")
 res<- rma(yi=meta_pre$estimate, sei=meta_pre$std_error, method = "REML", slab=study.ids)
 print('\n Meta-Analysis: COVID Period vs Pre-COVID \n')
 summary(res)
@@ -69,7 +69,7 @@ dev.off()
 meta_pre <-  meta_primary %>% filter(term=='period_sarscov2_postPre-COVID')|>  #only run analysis on hospitals with COVID and post-COVID data
   mutate(estimate=estimate*-1) |> #Comparison for COVID vs Post-COVID
   arrange(n_observations)
-study.ids<- c("1", "2", "3", "4", "5", "6", "7")
+study.ids<- c("1", "2", "3", "4", "5", "6", "7", "8")
 res<- rma(yi=meta_pre$estimate, sei=meta_pre$std_error, method = "REML", slab=study.ids)
 print('\n Meta-Analysis: Pre-COVID vs COVID period (SARS-CoV2[-]) \n')
 summary(res)
@@ -86,7 +86,7 @@ dev.off()
 #COVID + vs COVID - during COVID period
 meta <-  meta_primary %>% filter(term=='period_sarscov2_postCOVID_SarsCov2Pos')|>  #only run analysis on hospitals with COVID and post-COVID data
   arrange(n_observations)
-study.ids<- c("1", "2", "3", "4", "5", "6", "7", "8")
+study.ids<- c("1", "2", "3", "4", "5", "6", "7", "8", "9")
 res<- rma(yi=meta$estimate, sei=meta$std_error, method = "REML", slab=study.ids)
 print('\n Meta-Analysis COVID Period: SARS-CoV2(-) vs SARS-CoV2(+) \n')
 summary(res)
@@ -203,7 +203,7 @@ meta_72 <- model_terms_meta |> filter(analysis=='prone72')
 meta_pre <- meta_72 %>% filter(term=='study_periodPre-COVID')|>  #only run analysis on hospitals with COVID and post-COVID data
   mutate(estimate=estimate*-1) |> #Comparison for COVID vs Pre-COVID
   arrange(n_observations)
-study.ids<- c("1", "2", "3", "4", "5", "6", "7")
+study.ids<- c("1", "2", "3", "4", "5", "6", "7", "8")
 res<- rma(yi=meta_pre$estimate, sei=meta_pre$std_error, method = "REML", slab=study.ids)
 print('\n Meta-Analysis (72 Hour Proning(: COVID Period vs Pre-COVID \n')
 summary(res)

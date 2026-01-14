@@ -57,7 +57,7 @@ select <- dplyr::select
 
 ```{r Vectors to Make File Names for Import}
 #List of Sites Participating
-sites <- c('hopkins', 'nu', 'ucmc', 'umn', 'rush', 'penn', 'ohsu', 'umich')
+sites <- c('hopkins', 'nu', 'ucmc', 'umn', 'rush', 'penn', 'ohsu', 'umich', 'sunnybrook')
 
 #List of tables created by proning scripts - WITHOUT Site Name
 tables <- c("_Table1_by_Hospital", 
@@ -79,7 +79,9 @@ tables <- c("_Table1_by_Hospital",
             "_adjusted_models_severe_ards",
             "_adjusted_models_prone72",
             "_adjusted_models_moderate_ards",
-            "_adjusted_models_ards_icd10s")
+            "_adjusted_models_ards_icd10s",
+            "_prone_per_ards_severity",
+            "_prone_per_period_ards_icd")
 
 # Combine sites and tables to create full table names
 site_tables <- as.vector(outer(sites, tables, paste, sep = ""))
@@ -112,7 +114,7 @@ for (site in sites) {
 }
 
 # Print the names of loaded tables
-names(site_table_data)
+#names(site_table_data)
 
 ```
 ```{r Collate Data Function}
@@ -738,6 +740,85 @@ base_plot <- ggplot(all_site, aes(x=study_quarter, y=proned_12_hr_percent)) +
   units = "in"      # units set to inches for precise control
 )
 ```
+```{r Proning Count Summary By ARDS Severity}
+prone_summary_severity <- collate_tables("_prone_per_ards_severity")  |>
+  mutate(ards_severity=fcase(
+    severe_ards==1, 'severe_ards',
+    severe_ards==0, 'moderate_ards'
+  ))
+
+#Create Overall N by Period and ARDS Severity
+prone_summary_severity <- prone_summary_severity |>
+  group_by(study_period, ards_severity) |>
+  summarise(
+    n_patients = sum(n_patients, na.rm = TRUE),
+    n_proned_12_hr = sum(n_proned_12_hr, na.rm = TRUE),
+    proned_12_hr_percent = n_proned_12_hr/n_patients,
+    standard_error_12 = sqrt(proned_12_hr_percent * (1 - proned_12_hr_percent) / n_patients),
+    n_proned_24_hr = sum(n_proned_24_hr, na.rm = TRUE),
+    proned_24_hr_percent = n_proned_24_hr/n_patients,
+    standard_error_24 = sqrt(proned_24_hr_percent * (1 - proned_24_hr_percent) / n_patients),
+    n_proned_72_hr = sum(n_proned_72_hr, na.rm = TRUE),
+    proned_72_hr_percent = n_proned_72_hr/n_patients,
+    standard_error_72 = sqrt(proned_72_hr_percent * (1 - proned_72_hr_percent) / n_patients),
+    n_proned_all = sum(n_proned_all, na.rm = TRUE),
+    proned_percent_all = n_proned_all/n_patients,
+    standard_error_all = sqrt(proned_percent_all * (1 - proned_percent_all) / n_patients),
+  ) |>
+  ungroup() |>
+  mutate(site='all_sites')
+
+
+#Now Prepare Data Farme for ggplot
+severity_graph <- prone_summary_severity |>
+  mutate(ymin = proned_12_hr_percent - (1.96 * standard_error_12), 
+         ymax = proned_12_hr_percent + (1.96 * standard_error_12),
+         ymin = fifelse(ymin<0, 0, ymin),
+         ymax = fifelse(ymax>1.0, 1, ymax))
+
+severity_graph$ards_severity <-
+  factor(severity_graph$ards_severity, 
+                  levels = c("moderate_ards", "severe_ards"))  # Put desired order here
+severity_graph$study_period <-
+  factor(severity_graph$study_period, 
+                  levels = c("Pre-COVID", "COVID", "Post-COVID"))  # Put desired order here
+
+base_plot <- ggplot(severity_graph, aes(x=study_period, y=proned_12_hr_percent)) +
+  #Error bars for "all_sites" data by COVID Status
+  geom_linerange(aes(x=study_period, ymin = ymin, 
+                    ymax = ymax, color = ards_severity), 
+                width = 0.20, linewidth = 1.05, alpha=0.5) +
+  geom_point(aes(color= ards_severity)) +
+  geom_line(aes(group=ards_severity, color=ards_severity)) +
+  # Adjust legend font sizes in theme
+  theme(
+    legend.text = element_text(size = 14),   # Increase font size for linetype legend text
+    legend.title = element_text(size = 14),  # Increase font size for linetype legend title
+    legend.title.align = 0,  # Aligns legend title to left for clarity
+  ) +
+  # Y-axis for proning percentage and X-axis for study quarter with custom labels and limits
+  scale_y_continuous(breaks = seq(0, 1, by = 0.1), 
+                     labels = scales::percent, 
+                     limits = c(0, 1.0),
+                     name = 'Proned within 12 Hours of Enrollment') +
+  theme_classic() +
+  theme(legend.position = c(0.155, 0.75),
+        legend.text = element_text(size = 8),  # Smaller legend text
+        legend.key.size = unit(0.9, "lines"),  # Smaller legend keys
+        legend.spacing.y = unit(0.2, "cm")) +   # Less spacing between legend items) 
+  scale_color_met_d('Isfahan1', direction =-1) +
+  guides(color = guide_legend(title = ''))
+  base_plot
+  
+ggsave(
+  filename = 'proning_by_period_severity.pdf',
+  plot = base_plot,
+  path = paste0(project_location, '/summary_output/graphs/'),
+  width = 12,       # adjust width to make it wide
+  height = 6,       # adjust height for PowerPoint-friendly proportions
+  units = "in"      # units set to inches for precise control
+)
+```
 
 
 ```{r Summary for Aggregate Counts and Proning Pre and Post COVID}
@@ -796,6 +877,114 @@ prone_summary <- collate_tables('_prone_per_period') |>
   rbind(prone_summary_all)
 write_csv(prone_summary, paste0(project_location, '/summary_output/prone_summary_clif.csv'))
 ```
+
+```{r Repeat Prone Summary by Severity}
+prone_summary_severity <- collate_tables("_prone_per_ards_severity")  |>
+  mutate(ards_severity=fcase(
+    severe_ards==1, 'severe_ards',
+    severe_ards==0, 'moderate_ards'
+  )) |>
+  group_by(study_period, ards_severity) |>
+  summarise(
+      n_hospitals = sum(n_hospitals, na.rm=T),
+      n_patients = sum(n_patients, na.rm = TRUE),
+      across(
+        starts_with("n_proned_"),
+        ~ sum(.x, na.rm = TRUE),
+        .names = "{.col}"
+      )
+    ) |>
+      mutate(
+        across(
+          starts_with("n_proned"),
+          ~ round(.x / n_patients * 100, 1),
+          .names = "{.col}_percent"
+        ),
+        across(
+        ends_with("percent"),
+         ~ sqrt((.x / 100) * (1 - (.x / 100)) / n_patients),
+        .names = "standard_error_{.col}"
+       ),
+        site='all_sites'
+      )
+
+#Rename
+prone_summary_temp <- prone_summary_severity |>
+  # Rename standard error columns
+  rename_with(
+    .cols = starts_with("standard_error_n"),
+    .fn = ~ gsub("standard_error_n_proned_([0-9]+)_hr_percent", 
+                  "standard_error_\\1", .x)
+  ) |>
+  # Rename percent columns
+  rename_with(
+    .cols = matches("^n_proned_[0-9]+_hr_percent$"),
+    .fn = ~ gsub("n_proned_", "proned_", .x)
+  ) |>
+  rename(
+   proned_percent_all =  n_proned_all_percent,
+   standard_error_all = standard_error_n_proned_all_percent
+  )
+prone_summary_severity <- collate_tables('_prone_per_ards_severity') |>
+  mutate(ards_severity=fcase(
+    severe_ards==1, 'severe_ards',
+    severe_ards==0, 'moderate_ards'
+  )) |>
+  select(-severe_ards) |>
+  rbind(prone_summary_temp)
+write_csv(prone_summary_severity , paste0(project_location, '/summary_output/prone_summary_by_severity.csv'))
+rm(prone_summary_temp)
+```
+
+```{r Repeat Prone Summary by ARDS ICD-10}
+prone_summary_icd <- collate_tables("_prone_per_period_ards_icd")  |>
+  group_by(study_period, ards_icd_10) |>
+  summarise(
+      n_hospitals = sum(n_hospitals, na.rm=T),
+      n_patients = sum(n_patients, na.rm = TRUE),
+      across(
+        starts_with("n_proned_"),
+        ~ sum(.x, na.rm = TRUE),
+        .names = "{.col}"
+      )
+    ) |>
+      mutate(
+        across(
+          starts_with("n_proned"),
+          ~ round(.x / n_patients * 100, 1),
+          .names = "{.col}_percent"
+        ),
+        across(
+        ends_with("percent"),
+         ~ sqrt((.x / 100) * (1 - (.x / 100)) / n_patients),
+        .names = "standard_error_{.col}"
+       ),
+        site='all_sites'
+      )
+
+#Rename
+prone_summary_temp <- prone_summary_icd |>
+  # Rename standard error columns
+  rename_with(
+    .cols = starts_with("standard_error_n"),
+    .fn = ~ gsub("standard_error_n_proned_([0-9]+)_hr_percent", 
+                  "standard_error_\\1", .x)
+  ) |>
+  # Rename percent columns
+  rename_with(
+    .cols = matches("^n_proned_[0-9]+_hr_percent$"),
+    .fn = ~ gsub("n_proned_", "proned_", .x)
+  ) |>
+  rename(
+   proned_percent_all =  n_proned_all_percent,
+   standard_error_all = standard_error_n_proned_all_percent
+  )
+prone_summary_icd <- collate_tables("_prone_per_period_ards_icd")|>
+  rbind(prone_summary_temp)
+write_csv(prone_summary_icd , paste0(project_location, '/summary_output/prone_summary_ards_icd10.csv'))
+rm(prone_summary_temp)
+```
+
 
 ```{r Bar Chart of Admits and COVID Status Over Time}
 base_plot <- ggplot(subset(prone_per_quarter_covid, site =='all_sites'), 
@@ -911,10 +1100,10 @@ tableone_master <- tableone_master |>
 
 #FOr Sites with Only Two STudy Periods Need to Correct Period Numbers for Summation
 new_data <- data.frame(
-  characteristic = rep('COVID', 1),
-  site = c('rush'),
-  Overall = c('157 (71.6)'),
-  percent_missing = rep("", 1)
+  characteristic = rep('COVID', 2),
+  site = c('rush', 'sunnybrook'),
+  Overall = c('157 (71.6)', '75 (50.0)'),
+  percent_missing = rep("", 2)
 )
 
 tableone_master <- rbind(tableone_master, new_data) |>
@@ -1014,7 +1203,11 @@ wide_table_scaffold <- c(
     "Other_Vent_Mode",
     "Pressure_Control",
     "Pressure_Support/CPAP",
-    "SIMV"
+    "SIMV",
+    "unknown_race",
+    "Study Period",
+    "Pre_COVID",
+    "Pressure_Control"
     )
 
 # Create lookup vector
@@ -1461,7 +1654,11 @@ wide_table_scaffold <- c(
     "Other_Vent_Mode",
     "Pressure_Control",
     "Pressure_Support/CPAP",
-    "SIMV"
+    "SIMV",
+    "unknown_race",
+    "Study Period",
+    "Pre-COVID",
+    "Pressure_Control"
     )
 
 # Create lookup vector
@@ -2068,7 +2265,9 @@ prone_ards_icd10 <- collate_tables('_adjusted_models_ards_icd10s') |>
   mutate(analysis='ards_icd10')
 
 model_terms_meta <- rbind(primary_analysis, prone72, prone_severe, prone_moderate, prone_ards_icd10) |>
-  arrange(site, analysis, V1)
+  arrange(site, analysis, V1) |>
+  #Remove Where Estimates Could Not be Generated
+  filter(!upper_bound=='Inf')
 write_csv(model_terms_meta, paste0(project_location, '/summary_output/model_terms_meta.csv'))
 ```
 
