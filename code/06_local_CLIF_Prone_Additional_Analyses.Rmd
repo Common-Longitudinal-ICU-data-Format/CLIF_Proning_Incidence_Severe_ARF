@@ -809,7 +809,7 @@ med_continuous <- open_dataset(paste0(tables_location, '/clif_medication_admin_c
     'paralytics',
     'sedation',
     'pulmonary vasodilators (inhaled)'),
-    tolower(med_route_category) %in% c('intravenous', 'inhaled'),
+    tolower(med_route_category) %in% c('intravenous', 'inhaled', 'iv'),
     !is.na(med_dose),
     #Filter Out Med Dose Units That Don't Indicate a Drip) 
     !med_dose_unit %in% c(
