@@ -69,6 +69,7 @@ tables <- c("_Table1_by_Hospital",
             "_pfratio_sample_size",
             "_aggregate_expected_prone",
             "_aggregate_expected_prone_wCOVID-Status",
+            "_aggregate_expected_prone_wCOVID-Status_post",
             "_propensity_build_estimates",
             "_propensity_build_covariance",
             "_global_aggregate_pronerisk_by_outcome",
@@ -925,6 +926,123 @@ prone_summary <- collate_tables('_prone_per_period') |>
   rbind(prone_summary_all)
 write_csv(prone_summary, paste0(project_location, '/summary_output/prone_summary_clif.csv'))
 ```
+
+```{r Prone Summary by COVID}
+prone_summary_covid <- collate_tables('_aggregate_expected_prone_wCOVID-Status') |>
+  group_by(period_sarscov2) |>
+  rename(n_proned=observed_prone) |>
+  summarise(
+      n_hospitals = sum(n_hospitals, na.rm=T),
+      n_patients = sum(n_patients, na.rm = TRUE),
+      across(
+        starts_with("n_proned"),
+        ~ sum(.x, na.rm = TRUE),
+        .names = "{.col}"
+      )
+    ) |>
+      mutate(
+        across(
+          starts_with("n_proned"),
+          ~ round(.x / n_patients * 100, 1),
+          .names = "{.col}_percent"
+        ),
+        across(
+        ends_with("percent"),
+         ~ sqrt((.x / 100) * (1 - (.x / 100)) / n_patients),
+        .names = "standard_error_{.col}"
+       ),
+        site='all_sites'
+      ) |>
+  relocate(site, .before = 'n_hospitals')
+
+prone_temp <- collate_tables('_aggregate_expected_prone_wCOVID-Status') |>
+  group_by(site, period_sarscov2) |>
+  rename(n_proned=observed_prone) |>
+  summarise(
+      n_hospitals = sum(n_hospitals, na.rm=T),
+      n_patients = sum(n_patients, na.rm = TRUE),
+      across(
+        starts_with("n_proned"),
+        ~ sum(.x, na.rm = TRUE),
+        .names = "{.col}"
+      )
+    ) |>
+      mutate(
+        across(
+          starts_with("n_proned"),
+          ~ round(.x / n_patients * 100, 1),
+          .names = "{.col}_percent"
+        ),
+        across(
+        ends_with("percent"),
+         ~ sqrt((.x / 100) * (1 - (.x / 100)) / n_patients),
+        .names = "standard_error_{.col}"
+       ))
+prone_summary_covid <- rbind(prone_summary_covid, prone_temp)
+
+write_csv(prone_summary_covid, paste0(project_location, '/summary_output/prone_summary_clif_covid.csv'))
+rm(prone_temp)
+```
+
+
+
+```{r Prone Summary by COVI - Post}
+prone_summary_covid <- collate_tables('_aggregate_expected_prone_wCOVID-Status_post') |>
+  group_by(period_sarscov2_post) |>
+  rename(n_proned=observed_prone) |>
+  summarise(
+      n_hospitals = sum(n_hospitals, na.rm=T),
+      n_patients = sum(n_patients, na.rm = TRUE),
+      across(
+        starts_with("n_proned"),
+        ~ sum(.x, na.rm = TRUE),
+        .names = "{.col}"
+      )
+    ) |>
+      mutate(
+        across(
+          starts_with("n_proned"),
+          ~ round(.x / n_patients * 100, 1),
+          .names = "{.col}_percent"
+        ),
+        across(
+        ends_with("percent"),
+         ~ sqrt((.x / 100) * (1 - (.x / 100)) / n_patients),
+        .names = "standard_error_{.col}"
+       ),
+        site='all_sites'
+      ) |>
+  relocate(site, .before = 'n_hospitals')
+
+prone_temp <- collate_tables('_aggregate_expected_prone_wCOVID-Status_post') |>
+  group_by(site, period_sarscov2_post) |>
+  rename(n_proned=observed_prone) |>
+  summarise(
+      n_hospitals = sum(n_hospitals, na.rm=T),
+      n_patients = sum(n_patients, na.rm = TRUE),
+      across(
+        starts_with("n_proned"),
+        ~ sum(.x, na.rm = TRUE),
+        .names = "{.col}"
+      )
+    ) |>
+      mutate(
+        across(
+          starts_with("n_proned"),
+          ~ round(.x / n_patients * 100, 1),
+          .names = "{.col}_percent"
+        ),
+        across(
+        ends_with("percent"),
+         ~ sqrt((.x / 100) * (1 - (.x / 100)) / n_patients),
+        .names = "standard_error_{.col}"
+       ))
+prone_summary_covid <- rbind(prone_summary_covid, prone_temp)
+
+write_csv(prone_summary_covid, paste0(project_location, '/summary_output/prone_summary_clif_covid_post.csv'))
+rm(prone_temp)
+```
+
 
 ```{r Repeat Prone Summary by Severity}
 prone_summary_severity <- collate_tables("_prone_per_ards_severity")  |>
@@ -2213,7 +2331,7 @@ final_prone_practice <- prone_practices |>
   select(characteristic) |> 
   left_join(table_prone_formatted_period)
 
-write.csv(table1_formatted_period, paste0(project_location, '/summary_output/prone_practices_continuous.csv'))
+write.csv(final_prone_practice, paste0(project_location, '/summary_output/prone_practices_continuous.csv'))
 ```
 
 ```{r Prepare Data for Meta-analysis}
@@ -2726,6 +2844,7 @@ summary_formatted <- median_vent_table %>%
   arrange(ord, var_ord) |>
   select(-ord, -var_ord)
 
+print(summary_formatted)
 write_csv(summary_formatted, paste0(project_location, '/summary_output/table_vent_medians.csv'))
 ```
 
@@ -2915,6 +3034,7 @@ summary_formatted <- median_outcomes_table %>%
   arrange(ord, var_ord) |>
   select(-ord, -var_ord)
 
+print(summary_formatted)
 write_csv(summary_formatted, paste0(project_location, '/summary_output/table_outcomes_medians.csv'))
 ```
 

@@ -7,7 +7,7 @@ output: html_document
 
 #Specify Project Location and File Type
 ```{r}
-project_location <- '~/Library/CloudStorage/OneDrive-JohnsHopkins/Research Projects/CLIF/CLIF_Projects/ProneProjects/ProningEpi/ProneSevereARF_Output'
+project_location <- '/Users/chadhochberg/Library/CloudStorage/OneDrive-JohnsHopkins/Research Projects/CLIF/CLIF_Projects/ProneProjects/ProningEpi/ProneSevereARF_Output_Revised'
 file_type <- 'csv'
 
 #Create Sub Folders within Project Folder
@@ -52,20 +52,22 @@ df_agg <- read.csv(paste0(project_location, '/summary_output/aggregate_data.csv'
   #Prepare to merge in Hospital Details
   mutate(
     hospital_id=fifelse(
-        hospital_id=='HUP', 'penn_hup', hospital_id),
+        hospital_id=='hup', 'penn_hup', hospital_id),
     hospital_id=fifelse(
-      hospital_id=='HUPME', 'penn_hupme', hospital_id),
+      hospital_id=='hupme', 'penn_hupme', hospital_id),
     hospital_id=fifelse(
-      hospital_id=='PAH', 'penn_pah', hospital_id),
+      hospital_id=='pah', 'penn_pah', hospital_id),
     hospital_id=fifelse(
-      hospital_id=='PPMC', 'penn_ppmc', hospital_id),
+      hospital_id=='ppmc', 'penn_ppmc', hospital_id),
     hospital_id=fifelse(
-      hospital_id=='UMCOP', 'penn_umcop', hospital_id),
+      hospital_id=='umcop', 'penn_umcop', hospital_id),
     hospital_id=fifelse(
-      hospital_id=='CCH', 'penn_cch', hospital_id)
-    )
+      hospital_id=='cch', 'penn_cch', hospital_id),
+    hospital_id=tolower(hospital_id)
+    ) 
 
-clif_hospital_description <- read.csv(paste0(project_location, '/clif_hospital_description.csv')) 
+clif_hospital_description <- read.csv(paste0(project_location, '/clif_hospital_description.csv')) |>
+  mutate(hospital_id=tolower(hospital_id))
 
 #Merge Hospital Data Into DF AGG
 df_agg <- df_agg |>
@@ -123,14 +125,28 @@ df_hospsize <- df_agg |>
 cat('\nHospital Size Description')
 df_hospsize
 
+#Proning By Hospital Size (BEFORE FILTERING SMALL HOSPITALS OUT)
+df_hospsize <- df_agg |>
+  group_by(icu_bed_cat, study_period) |>
+  summarise(
+    n_Hospitals=n(),
+    n_patients=sum(n_patients, na.rm=T),
+    n_proned=sum(observed_prone, na.rm=T),
+    percent_proned=round((n_proned/n_patients)*100, 2)
+  ) |>
+  arrange(study_period, icu_bed_cat)
+cat('\nProning Counts by Hospital Size and Period [Before Filtering Small Hospitals')
+df_hospsize
+
 #Filter Out Hospitals with Less Than 10 Patients
 df_agg <- df_agg |>
   #Filter OUT HOspitals-Periods with < 10 observations
   filter(n_patients>=10)
 
 #Now After Filtering
+df_unique_hosp <- df_agg |> distinct(hospital_id, Hospital_Type)
 cat('\nAfer Filtering Out Hospitals with >= 10 Patients \nHow Many Academic v Community Hospitals are In THese Data')
-table(df_agg$Hospital_Type)
+table(df_unique_hosp$Hospital_Type)
 
 df_hosptype_summary_post <- df_agg |>
   group_by(Hospital_Type, study_period) |>
@@ -195,18 +211,19 @@ global_agg_byoutcome_period <- read.csv(paste0(project_location, '/summary_outpu
   #Prepare to merge in Hospital Details
   mutate(
     hospital_id=fifelse(
-        hospital_id=='HUP', 'penn_hup', hospital_id),
+        hospital_id=='hup', 'penn_hup', hospital_id),
     hospital_id=fifelse(
-      hospital_id=='HUPME', 'penn_hupme', hospital_id),
+      hospital_id=='hupme', 'penn_hupme', hospital_id),
     hospital_id=fifelse(
-      hospital_id=='PAH', 'penn_pah', hospital_id),
+      hospital_id=='pah', 'penn_pah', hospital_id),
     hospital_id=fifelse(
-      hospital_id=='PPMC', 'penn_ppmc', hospital_id),
+      hospital_id=='ppmc', 'penn_ppmc', hospital_id),
     hospital_id=fifelse(
-      hospital_id=='UMCOP', 'penn_umcop', hospital_id),
+      hospital_id=='umcop', 'penn_umcop', hospital_id),
     hospital_id=fifelse(
-      hospital_id=='CCH', 'penn_cch', hospital_id)
-    )
+      hospital_id=='cch', 'penn_cch', hospital_id),
+    hospital_id=tolower(hospital_id)
+    ) 
 
 #Merge Back with DF Agg
 df_agg <- left_join(df_agg, global_agg_byoutcome_period) |>
@@ -375,6 +392,7 @@ ggsave('caterpillar_fully_adjusted.pdf',
   units = "in")    # units set to inches for precise control)
 ```
 
+
 ```{r Stacked Caterpillar Plots}
 #Stack Caterpillar Plots Vertically
 vertical_data <- reliability_adjust_full |>
@@ -507,7 +525,7 @@ stacked2 <- ggplot(stacked_data,
                               aes(x = hospital_rank,
                                   y = adjust_rate)) +
   geom_line(aes(x = hospital_rank,
-                y = adjust_rate, group=study_period, linetype=study_period),  color = 'black') +
+                y = adjust_rate, group=study_period, linetype=study_period),  color = 'lightgrey') +
   geom_linerange(aes(ymin = ci_low, ymax = ci_hi, color= Hospital_Type), linewidth=0.75, alpha = 0.4) +
   geom_point(aes(color=Hospital_Type, shape=study_period), size = 2) +  # Add points for center effects
   scale_x_continuous(
@@ -517,7 +535,25 @@ stacked2 <- ggplot(stacked_data,
   scale_y_continuous(breaks=seq(0,1.0, by=0.2), 
                      labels = scales::percent, 
                      limits = c(0,1.0)) +
-  MetBrewer::scale_color_met_d("Demuth") + #MetBrewer has many pallettes to choose from
+  scale_shape_discrete(
+    name ='Study Period',
+    labels = c("Pandemic", "Post-pandemic", "Pre-pandemic"),
+    guide = guide_legend(order = 1)
+  ) +
+  scale_linetype_manual(
+    name = "Study Period",
+    values = c("COVID" = "solid",           # Solid line
+               "Post-COVID" = "dashed",     # Dashed line
+               "Pre-COVID" = "twodash"),     # Dotted line
+    labels = c("Pandemic", "Post-pandemic", "Pre-pandemic"),
+    guide = 'none'
+  ) +
+  scale_color_manual(
+    name = NULL,  # Empty string removes the title
+    values = met.brewer("Demuth", n = 2),
+    labels = c("Academic Hospital", "Community Hospital"),
+    guide = guide_legend(order = 2)
+  ) +
   labs(
     x = "Hospitals\nRanked by COVID Period Proning Use",
     y = "% Eligible Patients Proned Within 12 Hours",
@@ -527,14 +563,34 @@ stacked2 <- ggplot(stacked_data,
   theme(panel.grid.major.x=element_blank(),
         panel.grid.minor.x=element_blank(),
         panel.grid.minor.y=element_blank(),
-        legend.position = c(0.15, 0.75),
-        legend.background = element_rect(fill = "white", color = "grey"))
+        legend.position = c(0.10, 0.78),
+        legend.background = element_rect(fill = "white", color = "grey")) 
 
 ggsave('stacked_caterpillar2.pdf', 
        path = paste0(project_location, '/summary_output/graphs/'),
        width = 12,       # adjust width to make it wide
        height = 6,       # adjust height for PowerPoint-friendly proportions
        units = "in")    # units set to inches for precise control)
+
+ggsave(
+  filename = 'stacked_caterpillar2.tiff',
+  path = paste0(project_location, '/summary_output/graphs/'),
+  width = 12,
+  height = 6,
+  units = "in",
+  dpi = 600,
+  compression = "lzw"
+)
+
+ggsave(
+  filename = 'stacked_caterpillar2.eps',
+  path = paste0(project_location, '/summary_output/graphs/'),
+  width = 12,       # adjust width to make it wide
+  height = 6,       # adjust height for PowerPoint-friendly proportions
+  units = "in",      # units set to inches for precise control
+  device = cairo_ps,
+  dpi = 600
+)
 
 stacked_data <- stacked_data |>
   group_by(study_period) |>
@@ -798,6 +854,7 @@ or <- exp(delta_post_covid_period)
 posterior_summary <- quantile(or, probs = c(0.5, 0.025, 0.975))
 cat('\nOdds Ratio and 95 Credible Interview for SARS-CoV2 Neg in COVID vs Pre-COVID \n', posterior_summary)
 ```
+
 ```{r Bayesian Hiearachical Model Examining Association of Hospital ICU Capacity And Proning Probability}
 #ICU bed capacity Not Included as an additional covariable (in addition to hospital type becaues of co-linearity)
 #Bayesian Hierarchial Model with Random Effects for Hospital and Study Period 
