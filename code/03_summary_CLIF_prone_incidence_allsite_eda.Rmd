@@ -563,6 +563,28 @@ ggsave(
   height = 6,       # adjust height for PowerPoint-friendly proportions
   units = "in"      # units set to inches for precise control
 )
+
+ggsave(
+  filename = 'proning_by_quarter_12_anonymous_clif.eps',
+  plot = base_plot,
+  path = paste0(project_location, '/summary_output/graphs/'),
+  width = 12,       # adjust width to make it wide
+  height = 6,       # adjust height for PowerPoint-friendly proportions
+  units = "in",      # units set to inches for precise control
+  device = cairo_ps,
+  dpi = 600
+)
+
+ggsave(
+  filename = 'proning_by_quarter_12_anonymous_clif.tiff',
+  plot = base_plot,
+  path = paste0(project_location, '/summary_output/graphs/'),
+  width = 12,
+  height = 6,
+  units = "in",
+  dpi = 600,
+  compression = "lzw"
+)
 ```
 
 ```{r Create Time Series Plot by COVID Status}
@@ -625,6 +647,28 @@ ggsave(
   width = 12,       # adjust width to make it wide
   height = 6,       # adjust height for PowerPoint-friendly proportions
   units = "in"      # units set to inches for precise control
+)
+
+ggsave(
+  filename = 'proning_by_quarter_12_covid_status.eps',
+  plot = base_plot,
+  path = paste0(project_location, '/summary_output/graphs/'),
+  width = 12,       # adjust width to make it wide
+  height = 6,       # adjust height for PowerPoint-friendly proportions
+  units = "in",      # units set to inches for precise control
+  device = cairo_ps,
+  dpi = 600
+)
+
+ggsave(
+  filename = 'proning_by_quarter_12_covid_status.tiff',
+  plot = base_plot,
+  path = paste0(project_location, '/summary_output/graphs/'),
+  width = 12,
+  height = 6,
+  units = "in",
+  dpi = 600,
+  compression = "lzw"
 )
 
 ```
@@ -2273,5 +2317,604 @@ model_terms_meta <- rbind(primary_analysis, prone72, prone_severe, prone_moderat
   #Remove Where Estimates Could Not be Generated
   filter(!upper_bound=='Inf')
 write_csv(model_terms_meta, paste0(project_location, '/summary_output/model_terms_meta.csv'))
+```
+
+
+```{r Prepare to Load Tables Into List}
+#List of tables without site name to expext
+tables <- c(
+  "_cat_outcomes_by_period.csv",
+  "_cont_outcomes_by_period.csv",
+  "_cat_outcomes_by_proned_period.csv",
+  "_cont_outcomes_by_proned_period.csv",
+  "_vent_summary_by_period_infusions.csv",
+  "_vent_summary_by_proned_period_infusion.csv",
+  "_vent_summary_by_period.csv",
+  "_vent_summary_by_proned_period.csv"
+)
+
+# Combine sites and tables to create full table names
+site_tables <- as.vector(outer(sites, tables, paste, sep = ""))
+```
+
+```{r Open Tables for CSV and RDS}
+# Create an empty list to store data frames
+site_table_data <- list()
+
+# Loop through each site and each table name
+for (site in sites) {
+  # Construct the directory path for the current site
+  site_directory <- file.path(paste0(project_location,'/',site))  
+
+  for (table_name in tables) {
+    # Construct the full file path for the CSV
+    file_path <- file.path(site_directory, paste0(site, table_name))
+    
+    # Check if the file exists before reading
+    if (file.exists(file_path)) {
+      # Use a combined key of site and table name to store the data frame in the list
+      site_table_data[[paste(site,table_name, sep="")]] <- fread(file_path)
+    } else {
+      message(paste("File not found:", file_path))
+    }
+  }
+}
+
+
+combine_lists <- function(data_list, table_name) {
+  # Create a placeholder for combined data
+  combined_table <- do.call(rbind, lapply(names(data_list), function(name) {
+    x <- data_list[[name]]  # Access the list element by name
+    if (!is.null(x[[table_name]])) {
+      # Extract the data frame
+      df <- x[[table_name]]
+      
+      # Extract the site name from the list name
+      site_name <- strsplit(name, "_")[[1]][1]  # Get the part before the underscore
+      
+      # Create a new column for the site
+      df$site <- site_name
+      
+      return(df)
+    } else {
+      return(NULL)
+    }
+  }))
+  
+  return(combined_table)
+}
+```
+
+```{r Summary Data For Ventilator Practice by Period}
+#For Purposes of this Study Will Use Exposure metric (PF defined vs SF Defined)
+
+table_vent_period <- collate_tables("_vent_summary_by_period.csv") #Continuous Outcomes
+table_infusion_period  <- collate_tables("_vent_summary_by_period_infusions.csv") #Categorical/Binary Outcomes
+
+#Determine Total N for Patients Represented, Total CLIF Sites and Total Hospitals
+N_aggregate <- table_infusion_period |> 
+  group_by(site, strata) |>
+  summarise(
+    n_site=max(n)
+  ) |>
+  group_by(strata) |>
+  mutate(
+    N_aggregate=sum(n_site, na.rm=T),
+    n_sites=n_distinct(site)) |>
+  ungroup() |>
+  arrange(site, strata)
+
+#In This Case Any Missing Categorical Data is Considered that Patient Did Not Get Drug (after quality control). Use aggregate counts from 'N_aggregate' to get n's; For example some sites never used inhaled pulmonaryvasodilators in this cohort
+#Now Aggregate Categorical Variables
+aggregate_infusion <- table_infusion_period |>
+  group_by(strata, variable, level) |>
+  dplyr::reframe(
+    n_total=sum(n),
+    n_miss=sum(miss, na.rm=T),
+    count=sum(freq,na.rm=T),
+    percent=count/(n_total-n_miss)
+  ) |>
+  #This Step Only Necessary When Some Categories Are Not in Some Sites Data (and that is the true underlying structure)
+  left_join(N_aggregate %>% select(strata, N_aggregate) %>% distinct, by=c('strata')) |>
+  mutate(
+    n_total=N_aggregate,
+    percent=count/(n_total-n_miss)
+  ) |>
+  select(-N_aggregate)
+
+#Order of Variables
+order_vec <- table_infusion_period$variable
+order <- data.frame(
+  variable=unique(order_vec)) |>
+  mutate(order_number=dplyr::row_number())
+
+aggregate_infusion <- aggregate_infusion |>
+  left_join(order, by='variable') |>
+  arrange(strata, order_number)
+```
+
+
+```{r Test For Difference in Distribution of Categorical Variables}
+#For now Table 1 Purposes This Ignores Clustering by Site
+vars <- unique(aggregate_infusion$variable) #Can do this as All Variables are Unique
+
+chisq_function <- function(cat_table) {
+  chi_df <- data.frame(
+    variable = character(),
+    chisq = numeric(),
+    p.value = numeric()
+  )
+  
+  for (v in vars) {
+    x <- cat_table |>
+      filter(variable == v)
+    
+    # Check if there are any rows for the variable
+    if (nrow(x) > 0) {
+      contingency_table <- xtabs(count ~ level + strata, data = x)
+      
+      # Print the contingency table to check
+      cat('\n')
+      print(prop.table(contingency_table, margin=2))
+      
+      # Perform the chi-squared test
+      #First Need to Remove Overall Strata if it Exists
+      x <- x |> filter(strata!='Overall')
+      contingency_table <- xtabs(count ~ level + strata, data = x)
+      chi <- chisq.test(contingency_table)
+      # Append the results to chi_df
+      chi_df <- rbind(
+        chi_df,
+        data.frame(
+          variable = v,
+          chisq = as.numeric(chi$statistic),
+          p.value = as.numeric(round(chi$p.value, digits = 4))
+        )
+      )
+    } else {
+      # If no data for the variable, append NA values
+      cat('\nNo Data for', v)
+    }
+  }
+  return(chi_df)  # Return the results data frame
+}
+
+tab_chi <- chisq_function(aggregate_infusion) |>
+  mutate(rn=1)
+
+#Merge Back with Table 1 and Convert to Wide
+table_infusion_paper <- aggregate_infusion |>
+  select(strata, variable, level, n_total, count, percent, order_number) |>
+  mutate(
+    percent=round((percent*100), digits = 2)
+  ) |>
+  rename(count_mean=count,
+         percent_sd=percent) |>
+  pivot_wider(
+    names_from=c(strata),
+    names_glue="{strata}_{.value}",
+    values_from=c(n_total, count_mean, percent_sd)) 
+
+#Vector For Reordering Columns
+strata_values <- c('Overall', 'Pre-COVID', 'COVID', 'Post-COVID')
+relocate_vector <- c()
+# Loop through the strata values to generate names for those strata
+for (stratum in strata_values) {
+  relocate_vector <- c(relocate_vector,
+                       paste(stratum, c("n_total", "count_mean", "percent_sd"), sep = "_"))
+}
+
+#Reorder and Add Statistical Testing
+table_infusion_paper <- table_infusion_paper |>
+  relocate(all_of(relocate_vector), .after = level) |>
+  group_by(variable) |>
+  arrange(variable, -level) |>
+  mutate(rn=dplyr::row_number()) |>
+  left_join(tab_chi, by=c('variable', 'rn')) |>
+  arrange(order_number, variable) |>
+  select(-order_number, -rn) |>
+  filter(level==1) #These are All Binary So Can Do This
+```
+
+```{r Now for Continuous Table 1 Generate Weighted Means/SD}
+cont_table_function <- function(table_cont) {
+  table_cont <- table_cont |>
+    group_by(strata, variable) |>
+    mutate(
+     value_n=n-miss,
+     overall_n=sum(value_n, na.rm=T),
+     weights = value_n/overall_n,
+     weighted_mean=round(sum(mean*weights, na.rm=T), 3),
+     weighted_sd=
+       round(sqrt(sum((value_n - 1) * sd^2, na.rm = T) / 
+                 sum(value_n - 1, na.rm = T)), 2)) |>
+      ungroup()
+}
+
+table_vent_working <- cont_table_function(table_vent_period) 
+
+#Function for Weighted ANOVA from Summary Data
+weighted_anova_pval <- function(table_cont) {
+  df <- table_cont |>
+    dplyr::group_by(variable) |>
+    filter(strata!='Overall') |>
+  # Total number of groups
+    mutate(k=length(unique(strata))) |>
+    #Between-group sum of squares (SSB)
+    mutate( 
+           # Total sample size across all strata
+           overall_n = sum(value_n, na.rm = TRUE),
+           # Grand mean across all strata
+           grand_mean = sum(mean * value_n, na.rm = TRUE) / sum(value_n, na.rm = TRUE),
+           # Between-strata sum of squares
+           ss_between = sum(value_n * (mean - grand_mean)^2, na.rm = TRUE),
+           # Within-strata sum of squares
+           ss_within = sum((value_n - 1) * sd^2, na.rm = TRUE),
+           # Degrees of freedom
+           df_between = k-1,
+           df_within = overall_n-k, 
+           # Mean squares
+           ms_between = ss_between/df_between,
+           ms_within = ss_within/df_within,
+           f_stat = round(ms_between/ms_within, 4),
+           p.value = round(pf(f_stat, df_between, df_within, lower.tail = FALSE), 4))
+  
+  new_columns <- df |>
+    select(variable, f_stat, p.value) |>
+    dplyr::distinct()
+  return(new_columns)
+}
+group_p_values <- weighted_anova_pval(table_vent_working)
+
+table_vent_paper <- table_vent_working |>
+  left_join(group_p_values, by='variable') |>
+  select(strata, variable, weighted_mean, weighted_sd, f_stat, p.value, overall_n) |>
+  distinct() |>
+  rename(
+    n_total=overall_n,
+    count_mean=weighted_mean,
+    percent_sd=weighted_sd
+  ) |>
+  pivot_wider(
+    names_from=c(strata),
+    names_glue="{strata}_{.value}",
+    values_from=c(n_total, count_mean, percent_sd)) 
+
+#Vector For Reordering Columns
+strata_values <- c('Overall', 'Pre-COVID', 'COVID', 'Post-COVID')
+relocate_vector <- c()
+# Loop through the strata values to generate names for those strata
+for (stratum in strata_values) {
+  relocate_vector <- c(relocate_vector,
+                       paste(stratum, c("n_total", "count_mean", "percent_sd"), sep = "_"))
+}
+
+#Reorder and Add Statistical Testing
+table_vent_paper <- table_vent_paper |>
+  relocate(all_of(relocate_vector), .after = variable) |>
+  mutate(level=NA_character_) |> #For Combining With Cat Table
+  relocate(level, .after=variable)
+
+#Now Table 1 Paper
+table_vent_practices <- rowbind(table_vent_paper, table_infusion_paper, fill=T) 
+
+#Make Table 1 Nice for Easy Pasting Into Paper
+readable_table <- function(tab, strata_values, has_continuous, has_categorical) {
+  
+  # First, create summary columns for each stratum
+  for (z in strata_values) {
+    # Create the new column name
+    new_col <- paste0(z, "_summary")
+    
+    # Create the source column names
+    count_col <- paste0(z, "_count_mean")
+    percent_col <- paste0(z, "_percent_sd")
+    
+    # Check if columns exist before trying to use them
+    if (count_col %in% names(tab) && percent_col %in% names(tab)) {
+      tab <- tab %>%
+        mutate(
+          !!new_col := case_when(
+            # Handle missing values
+            is.na(.data[[count_col]]) | is.na(.data[[percent_col]]) ~ NA_character_,
+            # Create summary
+            TRUE ~ paste0(
+              round(.data[[count_col]], digits = 1), 
+              ' (', 
+              round(.data[[percent_col]], digits = 1), 
+              ')'
+            )
+          )
+        )
+    }
+  }
+  
+  # Create relocate vector
+  relocate_vector <- c()
+  for (stratum in strata_values) {
+    n_total_col <- paste0(stratum, "_n_total")
+    summary_col <- paste0(stratum, "_summary")
+    
+    # Only add columns that exist
+    if (n_total_col %in% names(tab)) {
+      relocate_vector <- c(relocate_vector, n_total_col)
+    }
+    if (summary_col %in% names(tab)) {
+      relocate_vector <- c(relocate_vector, summary_col)
+    }
+  }
+  
+  # Select columns based on what exists
+  base_cols <- c("variable", "level")
+  stat_cols <- c()
+  
+  if ("p.value" %in% names(tab)) stat_cols <- c(stat_cols, "p.value")
+  if ("f_stat" %in% names(tab) && has_continuous) stat_cols <- c(stat_cols, "f_stat")
+  if ("chisq" %in% names(tab) && has_categorical) stat_cols <- c(stat_cols, "chisq")
+  
+  # Select only columns that exist
+  all_cols <- c(base_cols, relocate_vector, stat_cols)
+  existing_cols <- all_cols[all_cols %in% names(tab)]
+  
+  tab <- tab %>%
+    select(all_of(existing_cols))
+  
+  return(tab)
+}
+
+table_vent_practices <- readable_table(table_vent_practices, strata_values, has_continuous=T, has_categorical=T)
+
+#Add Number Missing and Percent Missing
+Total_n = N_aggregate$N_aggregate[N_aggregate$strata=='Overall' & N_aggregate$site=='hopkins']
+table_vent_practices <- table_vent_practices |>
+  mutate(N_aggregate=Total_n,
+         n_miss=N_aggregate-Overall_n_total,
+         percent_miss = round((n_miss / Overall_n_total) * 100, digits = 2)) |>
+  select(-N_aggregate)
+
+#Save Tables
+write_csv(table_vent_practices, paste0(project_location, '/summary_output/table_vent_practices.csv'))
+
+#Also Calculate Range of Medians and IQRs for Vent Practices
+median_vent_table <- table_vent_period |>
+  group_by(strata, variable) %>%
+  summarise(
+    n_sites = n(),
+    total_n = sum(n),
+    
+    # Median statistics
+    median_min = min(median, na.rm = TRUE),
+    median_max = max(median, na.rm = TRUE),
+    median_range = paste0(round(min(median, na.rm = TRUE), 1), 
+                          "-", 
+                          round(max(median, na.rm = TRUE), 1)),
+    
+    # Q1 (25th percentile) statistics
+    q1_min = min(p25, na.rm = TRUE),
+    q1_max = max(p25, na.rm = TRUE),
+    q1_range = paste0(round(min(p25, na.rm = TRUE), 1), 
+                      "-", 
+                      round(max(p25, na.rm = TRUE), 1)),
+    
+    # Q3 (75th percentile) statistics
+    q3_min = min(p75, na.rm = TRUE),
+    q3_max = max(p75, na.rm = TRUE),
+    q3_range = paste0(round(min(p75, na.rm = TRUE), 1), 
+                      "-", 
+                      round(max(p75, na.rm = TRUE), 1)),
+    
+    # Combined IQR range
+    iqr_range = paste0(round(min(p25, na.rm = TRUE), 1), 
+                       "-", 
+                       round(max(p75, na.rm = TRUE), 1)),
+    
+    .groups = "drop"
+  )
+
+# More readable format with combined median (IQR) column
+summary_formatted <- median_vent_table %>%
+  mutate(
+    median_iqr = paste0(median_range, " (", iqr_range, ")")
+  ) %>%
+  select(strata, variable, n_sites, total_n, median_range, iqr_range) |>
+  mutate(ord=fcase(
+    strata=='Overall', 1, 
+    strata=='Pre-COVID', 2,
+    strata=='COVID', 3),
+    ) |>
+  left_join(table_vent_paper %>% select(variable) |> mutate(var_ord=row_number())) |>
+  arrange(ord, var_ord) |>
+  select(-ord, -var_ord)
+
+write_csv(summary_formatted, paste0(project_location, '/summary_output/table_vent_medians.csv'))
+```
+
+```{r Outcomes - Start with Categorical Outcomes - By Proning and Period}
+table_cat_outcomes <- collate_tables("_cat_outcomes_by_proned_period.csv") 
+table_cont_outcomes <- collate_tables("_cont_outcomes_by_proned_period.csv") 
+
+#Rename Strata
+table_cat_outcomes <- table_cat_outcomes |>
+  mutate(
+    strata = case_when(
+      str_ends(strata, "_0") ~ str_replace(strata, "_0$", "_not_prone"),
+      str_ends(strata, "_1") ~ str_replace(strata, "_1$", "_proned"),
+      TRUE ~ strata  # Keep unchanged if doesn't match pattern
+    )
+  )
+
+
+#Now Aggregate Categorical Variables
+aggregate_outcomes <- table_cat_outcomes |>
+  group_by(strata, variable, level) |>
+  dplyr::reframe(
+    n_total=sum(n),
+    n_miss=sum(miss, na.rm=T),
+    count=sum(freq,na.rm=T),
+    percent=count/(n_total-n_miss)
+  ) 
+
+#Order of Variables
+order_vec <- table_cat_outcomes$variable
+order <- data.frame(
+  variable=unique(order_vec)) |>
+  mutate(order_number=dplyr::row_number())
+
+aggregate_outcomes <- aggregate_outcomes |>
+  left_join(order, by='variable') |>
+  arrange(strata, order_number)
+
+#For now Table 1 Purposes This Ignores Clustering by Site
+vars <- unique(aggregate_outcomes$variable) #Can do this as All Variables are Unique
+
+tab_chi <- chisq_function(aggregate_outcomes) |>
+  mutate(rn=1)
+
+#Merge Back with Table 1 and Convert to Wide
+table_outcomes_cat_paper <- aggregate_outcomes |>
+  select(strata, variable, level, n_total, count, percent, order_number) |>
+  mutate(
+    percent=round((percent*100), digits = 2)
+  ) |>
+  rename(count_mean=count,
+         percent_sd=percent) |>
+  pivot_wider(
+    names_from=c(strata),
+    names_glue="{strata}_{.value}",
+    values_from=c(n_total, count_mean, percent_sd)) 
+
+#Vector For Reordering Columns
+strata_values <- c('Overall', 
+                   'Pre-COVID_proned', 'Pre-COVID_not_prone', 
+                   'COVID_proned', 'COVID_not_prone',
+                   'Post-COVID_proned', 'Post-COVID_not_prone')
+relocate_vector <- c()
+# Loop through the strata values to generate names for those strata
+for (stratum in strata_values) {
+  relocate_vector <- c(relocate_vector,
+                       paste(stratum, c("n_total", "count_mean", "percent_sd"), sep = "_"))
+}
+
+#Reorder and Add Statistical Testing
+table_outcomes_cat_paper <- table_outcomes_cat_paper |>
+  relocate(all_of(relocate_vector), .after = level) |>
+  group_by(variable) |>
+  arrange(variable, -level) |>
+  mutate(rn=dplyr::row_number()) |>
+  left_join(tab_chi, by=c('variable', 'rn')) |>
+  arrange(order_number, variable) |>
+  select(-order_number, -rn) |>
+  filter(level==1) #These are All Binary So Can Do This
+```
+
+```{r Continuous Outcomes Table}
+table_outcomes_cont_working <- cont_table_function(table_cont_outcomes) |>
+  mutate(
+    strata = case_when(
+      str_ends(strata, "_0") ~ str_replace(strata, "_0$", "_not_prone"),
+      str_ends(strata, "_1") ~ str_replace(strata, "_1$", "_proned"),
+      TRUE ~ strata  # Keep unchanged if doesn't match pattern
+    )
+  )
+group_p_values <- weighted_anova_pval(table_outcomes_cont_working)
+
+table_outcomes_cont_working <- table_outcomes_cont_working |>
+  left_join(group_p_values, by='variable') |>
+  select(strata, variable, weighted_mean, weighted_sd, f_stat, p.value, overall_n) |>
+  distinct() |>
+  rename(
+    n_total=overall_n,
+    count_mean=weighted_mean,
+    percent_sd=weighted_sd
+  ) |>
+  pivot_wider(
+    names_from=c(strata),
+    names_glue="{strata}_{.value}",
+    values_from=c(n_total, count_mean, percent_sd)) 
+
+#Vector For Reordering Columns
+strata_values <- c('Overall', 
+                   'Pre-COVID_proned', 'Pre-COVID_not_prone', 
+                   'COVID_proned', 'COVID_not_prone',
+                   'Post-COVID_proned', 'Post-COVID_not_prone')
+relocate_vector <- c()
+# Loop through the strata values to generate names for those strata
+for (stratum in strata_values) {
+  relocate_vector <- c(relocate_vector,
+                       paste(stratum, c("n_total", "count_mean", "percent_sd"), sep = "_"))
+}
+
+#Reorder and Add Statistical Testing
+table_outcomes_paper <- table_outcomes_cont_working |>
+  relocate(all_of(relocate_vector), .after = variable) |>
+  mutate(level=NA_character_) |> #For Combining With Cat Table
+  relocate(level, .after=variable)
+
+#Now Table 1 Paper
+table_outcomes_paper <- rowbind(table_outcomes_cat_paper, table_outcomes_paper, fill=T) |>
+  ungroup()
+```
+
+```{r Outcomes Table for Easy-ier Reading}
+table_outcomes_paper <- readable_table(table_outcomes_paper, strata_values, has_continuous=T, has_categorical=T)
+
+#Save Tables
+write_csv(table_outcomes_paper, paste0(project_location, '/summary_output/table_outcomes_proned_period.csv'))
+
+#Also Calculate Range of Medians and IQRs for Outcomes
+median_outcomes_table <- table_cont_outcomes |>
+  group_by(strata, variable) %>%
+  summarise(
+    n_sites = n(),
+    total_n = sum(n),
+    
+    # Median statistics
+    median_min = min(median, na.rm = TRUE),
+    median_max = max(median, na.rm = TRUE),
+    median_range = paste0(round(min(median, na.rm = TRUE), 1), 
+                          "-", 
+                          round(max(median, na.rm = TRUE), 1)),
+    
+    # Q1 (25th percentile) statistics
+    q1_min = min(p25, na.rm = TRUE),
+    q1_max = max(p25, na.rm = TRUE),
+    q1_range = paste0(round(min(p25, na.rm = TRUE), 1), 
+                      "-", 
+                      round(max(p25, na.rm = TRUE), 1)),
+    
+    # Q3 (75th percentile) statistics
+    q3_min = min(p75, na.rm = TRUE),
+    q3_max = max(p75, na.rm = TRUE),
+    q3_range = paste0(round(min(p75, na.rm = TRUE), 1), 
+                      "-", 
+                      round(max(p75, na.rm = TRUE), 1)),
+    
+    # Combined IQR range
+    iqr_range = paste0(round(min(p25, na.rm = TRUE), 1), 
+                       "-", 
+                       round(max(p75, na.rm = TRUE), 1)),
+    
+    .groups = "drop"
+  )
+
+# More readable format with combined median (IQR) column
+summary_formatted <- median_outcomes_table %>%
+  mutate(
+    median_iqr = paste0(median_range, " (", iqr_range, ")")
+  ) %>%
+  select(strata, variable, n_sites, total_n, median_range, iqr_range) |>
+  mutate(ord=fcase(
+    strata=='Overall', 1, 
+    strata=='Pre-COVID_proned', 2,
+    strata=='Pre-COVID_not_prone', 3,
+    strata=='COVID_proned', 2,
+    strata=='COVID_not_prone', 3,
+     strata=='Post-COVID_proned', 2,
+    strata=='Post-COVID_not_prone', 3)) |>
+  left_join(table_vent_paper %>% select(variable) |> mutate(var_ord=row_number())) |>
+  arrange(ord, var_ord) |>
+  select(-ord, -var_ord)
+
+write_csv(summary_formatted, paste0(project_location, '/summary_output/table_outcomes_medians.csv'))
 ```
 
