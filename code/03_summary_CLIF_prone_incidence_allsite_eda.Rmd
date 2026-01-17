@@ -547,10 +547,10 @@ base_plot <- ggplot(overall_data, aes(x = study_quarter, y = proned_12_hr_percen
                      name = 'Year:Months') +
   # Add COVID-19 period separator with labels
   geom_vline(xintercept = 9.6667, linetype = 2) +
-  annotate("text", x = 5.667, y = 1.025, label = 'Pre COVID-19') +
+  annotate("text", x = 5.667, y = 1.025, label = 'Pre-Pandemic') +
   geom_vline(xintercept = 17.6667, linetype = 2) +
-  annotate("text", x = 13.667, y = 1.025, label = 'COVID-19') +
-  annotate("text", x = 21.667, y = 1.025, label = 'Post COVID-19') +
+  annotate("text", x = 13.667, y = 1.025, label = 'Pandemic') +
+  annotate("text", x = 21.667, y = 1.025, label = 'Post-Pandemic') +
   theme_classic() +
   theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1))
 # Display the plot
@@ -623,10 +623,10 @@ base_plot <- ggplot(all_site, aes(x=study_quarter, y=proned_12_hr_percent)) +
                      name = 'Year:Months') +
   # Add COVID-19 period separator with labels
   geom_vline(xintercept = 9.125, linetype = 2) +
-  annotate("text", x = 5.0, y = 1.025, label = 'Pre COVID-19') +
+  annotate("text", x = 5.0, y = 1.025, label = 'Pre-Pandemic') +
   geom_vline(xintercept = 17.6667, linetype = 2) +
-  annotate("text", x = 13.667, y = 1.025, label = 'COVID-19') +
-  annotate("text", x = 22.667, y = 1.025, label = 'Post COVID-19') +
+  annotate("text", x = 13.667, y = 1.025, label = 'Pandemic') +
+  annotate("text", x = 22.667, y = 1.025, label = 'Post-Pandemic') +
   theme_classic() +
   # Adjust legend font sizes in theme
   theme(
