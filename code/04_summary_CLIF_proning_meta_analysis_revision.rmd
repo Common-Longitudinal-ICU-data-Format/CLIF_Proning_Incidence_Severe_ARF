@@ -287,7 +287,7 @@ summary(res)
 meta1<- metagen(meta_pre$estimate , meta_pre$std_error , common=F, random=T, method.tau = "REML", sm="OR")
 pdf(paste0(project_location, "/summary_output/graphs/meta_analysis_covid-pre_icd10.pdf"), width = 7.3, height = 5)
 forest(meta1, layout = "JAMA", backtransf = TRUE)
-grid.text("Meta-Analysis, Patients with ARDS ICD-10 Code: Pandemic vs Pre-Pandemic", 
+grid.text("Meta-Analysis, Patients with ARDS ICD-10 Code: \n Pandemic vs Pre-Pandemic", 
           x = 0.5, y = 0.95, 
           gp = gpar(fontsize = 14, fontface = "bold"))
 grid.text("Favors \n Pre-Pandemic", x=.535, y=.8, gp=gpar(fontsize=10, fontface="bold"))
@@ -305,7 +305,7 @@ summary(res)
 meta1<- metagen(TE=meta_post$estimate , seTE=meta_post$std_error , common=F, random=T, method.tau = "REML", sm="OR")
 pdf(paste0(project_location, "/summary_output/graphs/meta_analysis_covid-post_icd10.pdf"), width = 7.3, height = 5)
 forest(meta1, layout = "JAMA", backtransf = TRUE, names=study.ids)
-grid.text("Meta-Analysis, Patients with ARDS ICD-10 Code: Pandemic vs Post-Pandemic", 
+grid.text("Meta-Analysis, Patients with ARDS ICD-10 Code: \n Pandemic vs Post-Pandemic", 
           x = 0.5, y = 0.95, 
           gp = gpar(fontsize = 14, fontface = "bold"))
 grid.text("Favors \n Post-Pandemic", x=.535, y=.83, gp=gpar(fontsize=10, fontface="bold"))
