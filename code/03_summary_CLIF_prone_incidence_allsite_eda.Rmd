@@ -82,7 +82,8 @@ tables <- c("_Table1_by_Hospital",
             "_adjusted_models_moderate_ards",
             "_adjusted_models_ards_icd10s",
             "_prone_per_ards_severity",
-            "_prone_per_period_ards_icd")
+            "_prone_per_period_ards_icd",
+            "_prone_duration_categorical")
 
 # Combine sites and tables to create full table names
 site_tables <- as.vector(outer(sites, tables, paste, sep = ""))
@@ -573,7 +574,7 @@ ggsave(
   height = 6,       # adjust height for PowerPoint-friendly proportions
   units = "in",      # units set to inches for precise control
   device = cairo_ps,
-  dpi = 600
+  dpi = 1000
 )
 
 ggsave(
@@ -583,7 +584,7 @@ ggsave(
   width = 12,
   height = 6,
   units = "in",
-  dpi = 600,
+  dpi = 1000,
   compression = "lzw"
 )
 ```
@@ -658,7 +659,7 @@ ggsave(
   height = 6,       # adjust height for PowerPoint-friendly proportions
   units = "in",      # units set to inches for precise control
   device = cairo_ps,
-  dpi = 600
+  dpi = 1000
 )
 
 ggsave(
@@ -668,7 +669,7 @@ ggsave(
   width = 12,
   height = 6,
   units = "in",
-  dpi = 600,
+  dpi = 1000,
   compression = "lzw"
 )
 
@@ -1170,10 +1171,10 @@ base_plot <- ggplot(subset(prone_per_quarter_covid, site =='all_sites'),
                      name = 'Year:Months') +
   # Add COVID-19 period separator with labels
   geom_vline(xintercept = 8.60, linetype = 2) +
-  annotate("text", x = 5.0, y = 505, label = 'Pre COVID-19', size=3.3) +
+  annotate("text", x = 5.0, y = 505, label = 'Pre-Pandemic', size=3.3) +
   geom_vline(xintercept = 17.5, linetype = 2) +
-  annotate("text", x = 14.0, y = 505, label = 'COVID-19', size=3.3) +
-  annotate("text", x = 21.667, y = 505, label = 'Post COVID-19', size=3.3) +
+  annotate("text", x = 14.0, y = 505, label = 'Pandemic', size=3.3) +
+  annotate("text", x = 21.667, y = 505, label = 'Post-Pandemic', size=3.3) +
   theme_classic() +
   theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1),
      legend.position = c(0.155, 0.75),
@@ -2448,7 +2449,8 @@ tables <- c(
   "_vent_summary_by_period_infusions.csv",
   "_vent_summary_by_proned_period_infusion.csv",
   "_vent_summary_by_period.csv",
-  "_vent_summary_by_proned_period.csv"
+  "_vent_summary_by_proned_period.csv",
+  "_prone_duration_categorical.csv"
 )
 
 # Combine sites and tables to create full table names
@@ -3037,4 +3039,88 @@ summary_formatted <- median_outcomes_table %>%
 print(summary_formatted)
 write_csv(summary_formatted, paste0(project_location, '/summary_output/table_outcomes_medians.csv'))
 ```
+```{r Prone Practice Categories}
+table_prone_cat <- collate_tables("_prone_duration_categorical.csv") 
+
+#Now Aggregate Categorical Variables
+aggregate_outcomes <- table_prone_cat |>
+  group_by(strata, variable, level) |>
+  dplyr::reframe(
+    n_total=sum(n-miss),
+    n_miss=sum(miss, na.rm=T),
+    count=sum(freq,na.rm=T)
+  ) |>
+  #Take Max n_total within each strata; This is because if a category is missing from a site, it will not be included in the total N denominator
+  group_by(strata) |>
+  mutate(
+    n_total=max(n_total),
+    percent=count/n_total) |>
+  ungroup()
+
+#Order of Variables
+order_vec <- table_prone_cat$variable
+order <- data.frame(
+  variable=unique(order_vec)) |>
+  mutate(order_number=dplyr::row_number())
+
+aggregate_outcomes <- aggregate_outcomes |>
+  left_join(order, by='variable') |>
+  arrange(strata, order_number)
+
+#For now Table 1 Purposes This Ignores Clustering by Site
+vars <- unique(aggregate_outcomes$variable) #Can do this as All Variables are Unique
+
+tab_chi <- chisq_function(aggregate_outcomes) |>
+  mutate(rn=1)
+
+#Merge Back with Table 1 and Convert to Wide
+table_prone_cat_paper <- aggregate_outcomes |>
+  select(strata, variable, level, n_total, count, percent, order_number) |>
+  mutate(
+    percent=round((percent*100), digits = 2)
+  ) |>
+  rename(count_mean=count,
+         percent_sd=percent) |>
+  pivot_wider(
+    names_from=c(strata),
+    names_glue="{strata}_{.value}",
+    values_from=c(n_total, count_mean, percent_sd)) 
+
+#Vector For Reordering Columns
+strata_values <- c('Overall', 
+                   'Pre-COVID',  
+                   'COVID',
+                   'Post-COVID')
+relocate_vector <- c()
+# Loop through the strata values to generate names for those strata
+for (stratum in strata_values) {
+  relocate_vector <- c(relocate_vector,
+                       paste(stratum, c("n_total", "count_mean", "percent_sd"), sep = "_"))
+}
+
+#Reorder and Add Statistical Testing
+table_prone_cat_paper <- table_prone_cat_paper |>
+  relocate(all_of(relocate_vector), .after = level) |>
+  group_by(variable) |>
+  arrange(variable) |>
+  mutate(rn=dplyr::row_number()) |>
+  left_join(tab_chi, by=c('variable', 'rn')) |>
+  #Just for Proning
+  mutate(temp=fcase(
+    level=="<=12 hours", 1, 
+    level=='12-16 hours', 2,
+    level=='16-24 hours', 3, 
+    level=='24-48 hours', 4,
+    level=='>48 hours', 5
+  )) |>
+  arrange(order_number, variable, temp) |>
+  select(-order_number, -rn, -temp) 
+  
+table_prone_cat_paper <- readable_table(table_prone_cat_paper, strata_values, has_continuous=F, has_categorical=T)
+
+write_csv(table_prone_cat_paper, paste0(project_location, '/summary_output/prone_practices_categorical.csv'))
+
+
+```
+
 
