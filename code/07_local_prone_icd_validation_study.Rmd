@@ -251,7 +251,9 @@ prone_analytic_df <- prone_analytic_df |> collect()
 
 #Limit to 2023 and 2024
 prone_analytic_df <- prone_analytic_df |>
-  filter(year(t_enrollment)>=2023)
+  filter(year(t_enrollment)>=2023) |>
+  #Make Female Variable
+  mutate(female=fifelse(tolower(sex_category)=='female', 1, 0))
 
 prone_analytic_df
 ```
