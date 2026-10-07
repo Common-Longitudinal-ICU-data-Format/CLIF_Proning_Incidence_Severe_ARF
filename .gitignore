@@ -33,3 +33,7 @@ initialize_renv.R
 project_output/
 project_tables/
 
+# code review
+code_review/
+claude.md
+
