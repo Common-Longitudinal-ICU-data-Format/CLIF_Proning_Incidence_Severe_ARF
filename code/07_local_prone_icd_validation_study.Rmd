@@ -24,6 +24,7 @@ packages <- c("lubridate",
               "rprojroot",
               "tableone",
               "readxl",
+              "readr",
               "arrow",
               "collapse",
               "data.table",
@@ -214,11 +215,11 @@ fn.timezone_tolocal <- function(df) {
   # Get the dataset schema
   sch <- df$schema
   #Which Fields are Datetime Types?
-  datetime_fields <- keep(sch$fields, function(field) {
+  datetime_fields <- purrr::keep(sch$fields, function(field) {
     grepl("^timestamp", field$type$ToString())
   })
   # Extract the names of these datetime columns
-  datetime_cols <- map_chr(datetime_fields, "name")
+  datetime_cols <- purrr::map_chr(datetime_fields, "name")
 
   #Now Convert DateTime Columns to Local Timezone
   df <- df %>%
