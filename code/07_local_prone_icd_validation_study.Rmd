@@ -31,7 +31,8 @@ packages <- c("lubridate",
               "viridis",
               "sandwich", #Cluster Robust Standard Errors
               "lmtest",  #Allows Calculation of Cluster Robust Standard Errors
-              "marginaleffects") #Predictions and Average Slopes for Average Marginal Effects
+              "marginaleffects", #Predictions and Average Slopes for Average Marginal Effects
+              "binom") #Wilson 95% CIs for Sensitivity/Specificity
 
 install_if_missing <- function(package) {
   if (!require(package, character.only = TRUE)) {
@@ -104,6 +105,22 @@ ventilation_code_map <- c(
 )
 
 ventilation_pattern <- paste0("^(", paste(ventilation_codes, collapse = "|"), ")")
+
+# Small-Cell Suppression Threshold - Applied to Every Raw Count Written to path_out_*/path_out_*_plot
+# (This Study's Outputs Are Pooled Across Sites, So Small Cells Are a Re-Identification Risk)
+small_cell_threshold <- 10
+
+# Masks a Count for Display/Export: 0 Is Left As-Is (Not a Privacy Risk, Just an Empty Cell), Any
+# Nonzero Count Below the Threshold Becomes "<10", Everything Else Is Shown As-Is
+mask_small_n <- function(x, threshold = small_cell_threshold) {
+  ifelse(x > 0 & x < threshold, paste0("<", threshold), as.character(x))
+}
+
+# Caps a Count at the Threshold for Plotting (Bar Height / Fill Intensity) So a Suppressed Cell's
+# Exact Magnitude Cannot Be Read Off the Plot Either - Pair With mask_small_n() for the Text Label
+cap_small_n <- function(x, threshold = small_cell_threshold) {
+  ifelse(x > 0 & x < threshold, threshold, x)
+}
 ```
 
 ```{r Input and Output File Paths}
@@ -331,7 +348,7 @@ prone_analytic_df <- prone_analytic_df |>
   mutate(severe_ards=fifelse(min_pf_ratio<100, 1, 0))
 ```
 
-```{r}
+```{r Load Cohort Hospitalization IDs}
 #Get list of Hospitalization IDs; some admissions (defined as patient_id+encounter_block, can span multiple hospitalization_ids [i.e. transferred between site hospitals])
 
 load(path_cohort_hosp_ids)
@@ -422,7 +439,7 @@ path_larger_proning_table <- paste0(tables_location, "/", larger_proning_table, 
 
 
 
-```{r}
+```{r Find Earliest Billed Proning Procedure Date}
 # earliest documented instance by code and name
 
 earliest_procedure_billed_dttm <- open_dataset(path_larger_proning_table) |>
@@ -439,7 +456,7 @@ earliest_procedure_billed_dttm <- open_dataset(path_larger_proning_table) |>
 ```
 
 
-```{r}
+```{r Save Proning Table Summary}
 # Prepare a data frame with the table name and earliest procedure
 proning_summary <- data.frame(
   proning_table = larger_proning_table,
@@ -460,7 +477,7 @@ cohort_hospitalization_ids <- cohort_hospitalization_ids |>
 
 
 
-```{r}
+```{r Derive Proning ICD Flags per Encounter}
 proning_icd <- open_dataset(path_larger_proning_table) |>
   mutate(hospitalization_id = as.character(hospitalization_id)) |>
   dplyr::semi_join(cohort_hospitalization_ids, by = "hospitalization_id") |>
@@ -486,7 +503,7 @@ proning_icd <- open_dataset(path_larger_proning_table) |>
   )
 ```
 
-```{r}
+```{r Derive Ventilation ICD Flags per Encounter}
 ventilation_icd <- open_dataset(path_larger_proning_table)|>
   mutate(hospitalization_id = as.character(hospitalization_id)) |>
   dplyr::semi_join(cohort_hospitalization_ids, by = "hospitalization_id") |>
@@ -514,7 +531,7 @@ ventilation_icd <- open_dataset(path_larger_proning_table)|>
 
 
 
-```{r}
+```{r Join ICD Flags into Analytic Dataset}
 joined_df <- dplyr::left_join(
   prone_analytic_df,
   proning_icd,
@@ -539,7 +556,7 @@ if (nrow(joined_df) != nrow(prone_analytic_df)) {
 ```
 
 
-```{r}
+```{r Save Proning and Ventilation Code Count Tables}
 proning_code_counts <- joined_df %>%
   #Total Number of Hospitals
   mutate(
@@ -554,7 +571,9 @@ proning_code_counts <- joined_df %>%
     n_hospitals_with_prone_icd=median(n_hospitals_proneICD, na.rm=T),
     median_pt_prone_duration = median(median_pt_prone_duration, na.rm = TRUE),
     .groups = "drop"
-  )
+  ) |>
+  # Mask Small Cells (n<10) Before Export - 0 Stays 0
+  mutate(count = mask_small_n(count))
 
 
 write_csv(proning_code_counts, path_out_proning_counts)
@@ -566,12 +585,14 @@ vent_code_counts <- joined_df %>%
     count = n(),
     median_vent_duration_hours = median(vent_duration_hours, na.rm = TRUE),
     .groups = "drop"
-  )
+  ) |>
+  # Mask Small Cells (n<10) Before Export - 0 Stays 0
+  mutate(count = mask_small_n(count))
 
 write_csv(vent_code_counts, path_out_vent_counts)
 ```
 
-```{r}
+```{r Derive Any-Proning and Any-Ventilation ICD Indicators}
 joined_df <- joined_df %>%
   mutate(any_proning_icd = as.integer(proning_lt8h == 1 | proning_8_24h == 1 | proning_gt24h == 1),
          any_proning_icd = ifelse(is.na(any_proning_icd), 0L, any_proning_icd))
@@ -584,7 +605,7 @@ joined_df$any_ventilation_flowsheet = 1
 ```
 
 
-```{r}
+```{r Compute Proning Sensitivity and Specificity}
 # create confusion table
 confusion <- joined_df %>%
   summarise(
@@ -593,10 +614,6 @@ confusion <- joined_df %>%
     FP = sum(any_proning_icd == 1 & proned == 0, na.rm = TRUE),
     FN = sum(any_proning_icd == 0 & proned == 1, na.rm = TRUE)
   )
-
-# calculate sensitivity and specificity
-sensitivity <- confusion$TP / (confusion$TP + confusion$FN)
-specificity <- confusion$TN / (confusion$TN + confusion$FP)
 
 # QC: A Zero Denominator Here Means No Truly-Proned (or No Truly-Not-Proned) Patients in the Filtered
 # Cohort, Which Would Silently Produce NaN Rather Than a Meaningful Sensitivity/Specificity
@@ -607,14 +624,26 @@ if ((confusion$TN + confusion$FP) == 0) {
   warning("specificity is NaN at site '", site, "': no flowsheet-not-proned (proned==0) patients in the filtered cohort.")
 }
 
-sensitivity
-specificity
+# Sensitivity/Specificity With Wilson 95% CIs (More Robust Than a Normal-Approximation CI When Cell
+# Counts Are Small). The Raw TP/TN/FP/FN Cell Counts Above Stay In-Memory Only - Only the Resulting
+# Rate + CI (Written to Disk Below) Are Persisted, Since Individual Cells Can Be Very Small Counts.
+sens_ci <- binom::binom.confint(confusion$TP, confusion$TP + confusion$FN, methods = "wilson")
+spec_ci <- binom::binom.confint(confusion$TN, confusion$TN + confusion$FP, methods = "wilson")
+
+proning_validity_metrics <- tibble(
+  metric   = c("sensitivity", "specificity"),
+  estimate = c(sens_ci$mean, spec_ci$mean),
+  ci_lower = c(sens_ci$lower, spec_ci$lower),
+  ci_upper = c(sens_ci$upper, spec_ci$upper)
+)
+
+proning_validity_metrics
 
 ```
 
 
 
-```{r}
+```{r Save Proning Validity Metrics and Plot Confusion Matrix}
 confusion_df_proning <- joined_df %>%
   count(proned, any_proning_icd) %>%
   rename(Count = n) %>%
@@ -622,18 +651,29 @@ confusion_df_proning <- joined_df %>%
            any_proning_icd = c(0, 1),
            fill = list(Count = 0))
 
-write_csv(confusion_df_proning, path_out_proned_cf)
+# Only the Derived Sensitivity/Specificity + CI (Computed Above) Are Written to Disk - Not the Raw
+# Cell Counts, Which Can Be Very Small. write_csv(confusion_df_proning, ...) Intentionally Removed.
+write_csv(proning_validity_metrics, path_out_proned_cf)
 
-plot_a <- ggplot(confusion_df_proning, aes(x = any_proning_icd, y = proned, fill = Count)) +
+# Mask Small Cells (n<10): Cap the Fill Intensity so Color Cannot Reveal the Exact Value, Label
+# Shows "<10" - 0 Is Left As-Is Since It Is Not a Small-Cell Privacy Risk, Just an Empty Cell
+confusion_df_proning <- confusion_df_proning |>
+  mutate(
+    Count_label  = mask_small_n(Count),
+    Count_capped = cap_small_n(Count)
+  )
+
+plot_a <- ggplot(confusion_df_proning, aes(x = any_proning_icd, y = proned, fill = Count_capped)) +
   geom_tile(color = "white") +
-  geom_text(aes(label = Count), color = "blue", size = 6) +
+  geom_text(aes(label = Count_label), color = "blue", size = 6) +
   scale_fill_gradient(low = "lightblue", high = "darkblue") +
   scale_x_continuous(breaks = c(0, 1), labels = c("0", "1")) +
   scale_y_continuous(breaks = c(0, 1), labels = c("0", "1")) +
   labs(
     title = "Proning Confusion Matrix",
     x = "any_proning_icd_fill",
-    y = "proned flowsheet"
+    y = "proned flowsheet",
+    fill = "Count"
   ) +
   coord_fixed() +
   theme_minimal(base_size = 10)
@@ -643,7 +683,7 @@ ggsave(path_out_proned_cf_plot, plot = plot_a, width = 6, height = 6)
 
 
 
-```{r}
+```{r Save Ventilation Validity Metrics and Plot Confusion Matrix}
 # create confusion matrix table
 
 
@@ -654,19 +694,46 @@ confusion_df_vent <- joined_df %>%
            any_ventilation_icd = c(0, 1),
            fill = list(Count = 0))
 
-write_csv(confusion_df_vent, path_out_vent_cf)
+# Ventilation: any_ventilation_flowsheet Is Hardcoded to 1 for Everyone, So TN/FP Are Always 0 -
+# Specificity Has No Denominator and Is Recorded as NA. Sensitivity (ICD-Capture Rate) Is Still
+# Well-Defined and Gets a Wilson 95% CI, Same as the Proning Metrics Above; Raw Cell Counts Are Not
+# Written to Disk.
+vent_confusion <- joined_df %>%
+  summarise(
+    TP = sum(any_ventilation_icd == 1 & any_ventilation_flowsheet == 1, na.rm = TRUE),
+    TN = sum(any_ventilation_icd == 0 & any_ventilation_flowsheet == 0, na.rm = TRUE),
+    FP = sum(any_ventilation_icd == 1 & any_ventilation_flowsheet == 0, na.rm = TRUE),
+    FN = sum(any_ventilation_icd == 0 & any_ventilation_flowsheet == 1, na.rm = TRUE)
+  )
+vent_sens_ci <- binom::binom.confint(vent_confusion$TP, vent_confusion$TP + vent_confusion$FN, methods = "wilson")
 
+vent_validity_metrics <- tibble(
+  metric   = c("sensitivity", "specificity"),
+  estimate = c(vent_sens_ci$mean, NA_real_),
+  ci_lower = c(vent_sens_ci$lower, NA_real_),
+  ci_upper = c(vent_sens_ci$upper, NA_real_)
+)
+write_csv(vent_validity_metrics, path_out_vent_cf)
 
-plot_b <- ggplot(confusion_df_vent, aes(x = any_ventilation_icd, y = any_ventilation_flowsheet, fill = Count)) +
+# Mask Small Cells (n<10): Cap the Fill Intensity so Color Cannot Reveal the Exact Value, Label
+# Shows "<10" - 0 Is Left As-Is Since It Is Not a Small-Cell Privacy Risk, Just an Empty Cell
+confusion_df_vent <- confusion_df_vent |>
+  mutate(
+    Count_label  = mask_small_n(Count),
+    Count_capped = cap_small_n(Count)
+  )
+
+plot_b <- ggplot(confusion_df_vent, aes(x = any_ventilation_icd, y = any_ventilation_flowsheet, fill = Count_capped)) +
   geom_tile(color = "white") +
-  geom_text(aes(label = Count), color = "white", size = 6) +
+  geom_text(aes(label = Count_label), color = "white", size = 6) +
   scale_fill_gradient(low = "lightblue", high = "darkblue") +
   scale_x_continuous(breaks = c(0, 1), labels = c("0", "1")) +
   scale_y_continuous(breaks = c(0, 1), labels = c("0", "1")) +
   labs(
     title = "Ventilation Confusion Matrix",
     x = "any_ventilation_icd",
-    y = "any_ventilation_flowsheet"
+    y = "any_ventilation_flowsheet",
+    fill = "Count"
   ) +
   coord_fixed() +
   theme_minimal(base_size = 10)
@@ -677,7 +744,7 @@ ggsave(path_out_vent_cf_plot, plot = plot_b, width = 6, height = 6)
 
 
 
-```{r}
+```{r Create and Save Table One}
 joined_df <- joined_df |>
   mutate(
     race_category = case_when(
@@ -744,6 +811,18 @@ summary(tableone_cohort)
 table_list <- tab_decomp(tableone_cohort)
 table_list$continuous <- table_list$continuous |> mutate(strata=fcase(strata=='0', 'not_proned', strata=='1', 'proned', strata=='Overall', 'Overall'))
 table_list$categorical <- table_list$categorical |> mutate(strata=fcase(strata=='0', 'not_proned', strata=='1', 'proned', strata=='Overall', 'Overall'))
+
+# Small-Cell Suppression: tableone's Per-Level, Per-Stratum Breakdown ('freq'/'percent'/'cum.percent')
+# Is the Same Small-Cell Risk as Any Other Count Table (e.g., a Rare race_category Level Within the
+# proned=1 Stratum). 'percent' and 'cum.percent' Are Suppressed Whenever Their Row's 'freq' Is <10,
+# Since Either Can Itself Reveal the Raw Count; 'freq' Is Then Masked to "<10" (0 Left As-Is).
+table_list$categorical <- table_list$categorical |>
+  mutate(
+    percent = ifelse(freq > 0 & freq < small_cell_threshold, NA_real_, percent),
+    cum.percent = ifelse(freq > 0 & freq < small_cell_threshold, NA_real_, cum.percent),
+    freq = mask_small_n(freq)
+  )
+
 write_csv(table_list$continuous, path_out_tableone_cont)
 write_csv(table_list$categorical, path_out_tableone_cat)
 
@@ -752,7 +831,7 @@ write_csv(table_list$categorical, path_out_tableone_cat)
 
 
 
-```{r}
+```{r Summarize and Plot Proning Counts per Quarter}
 # Summarize counts per year-quarter
 proning_quarter <- joined_df |>
   mutate(
@@ -772,31 +851,48 @@ proning_quarter <- joined_df |>
     values_to = "count"
   )
 
+# Mask Small Cells (n<10) Before Export - 0 Stays 0. CSV Gets the Masked String; Plotting Below
+# Keeps a Separate Capped Numeric Column so Bar Height Cannot Reveal the Exact Suppressed Value.
+proning_quarter <- proning_quarter |>
+  mutate(
+    count_label  = mask_small_n(count),
+    count_capped = cap_small_n(count)
+  )
 
-write_csv(proning_quarter, path_out_proning_quarter)
+# CSV Export Disabled Per Request - Plot Below Is Kept
+# write_csv(proning_quarter |> mutate(count = count_label) |> select(-count_label, -count_capped),
+#           path_out_proning_quarter)
 
 
-# Plot bar chart per quarter
-plot_c <- ggplot(proning_quarter, aes(x = year_quarter, y = count, fill = proning_type)) +
-  geom_col(position = "dodge") +
-  scale_fill_manual(values = c("any_proning_icd" = "steelblue", "proned" = "darkorange")) +
-  labs(
-    title = "Proning Counts per Quarter",
-    x = "Year-Quarter",
-    y = "Number of Patients",
-    fill = "Proning Type"
-  ) +
-  theme_minimal(base_size = 14) +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))
-plot_c
-ggsave(path_out_proning_quarter_plot, plot = plot_c, width = 10, height = 6)
+# Plot Disabled Per Request - Once Small Cells Are Suppressed/Capped, the Per-Quarter Bar Chart No
+# Longer Conveys Much Beyond the Masking Itself
+# plot_c <- ggplot(proning_quarter, aes(x = year_quarter, y = count_capped, fill = proning_type)) +
+#   geom_col(position = "dodge") +
+#   geom_text(
+#     data = proning_quarter |> filter(count > 0 & count < small_cell_threshold),
+#     aes(label = count_label),
+#     position = position_dodge(width = 0.9),
+#     vjust = -0.3,
+#     size = 3
+#   ) +
+#   scale_fill_manual(values = c("any_proning_icd" = "steelblue", "proned" = "darkorange")) +
+#   labs(
+#     title = "Proning Counts per Quarter",
+#     x = "Year-Quarter",
+#     y = "Number of Patients",
+#     fill = "Proning Type"
+#   ) +
+#   theme_minimal(base_size = 14) +
+#   theme(axis.text.x = element_text(angle = 45, hjust = 1))
+# plot_c
+# ggsave(path_out_proning_quarter_plot, plot = plot_c, width = 10, height = 6)
 
 
 ```
 
 
 # QC
-```{r}
+```{r Identify ICD-Only Proning Events}
 proning_icd_events <- open_dataset(path_patient_procedures) |>
   mutate(hospitalization_id = as.character(hospitalization_id)) |>
   dplyr::semi_join(cohort_hospitalization_ids, by = "hospitalization_id") |>
@@ -821,7 +917,7 @@ proning_icd_events <- open_dataset(path_patient_procedures) |>
   filter(!is.na(icd_prone_dttm))
 ```
 
-```{r}
+```{r Summarize ICD-Only Proning vs Flowsheet Timing}
 first_proning_icd_df <- proning_icd_events %>%
   group_by(patient_id, encounter_block) %>%
   summarise(
@@ -869,8 +965,20 @@ icd_only_summary <- icd_only_prone_qc_table %>%
     pct_long_prone = mean(proning_gt24h == 1, na.rm = TRUE)
   )
 
-write_csv(icd_only_summary, path_out_icd_only_summary)
+# Small-Cell Suppression: When the Base n Is <10, a Precise Median/Percentage Can Itself Reveal (or
+# Closely Bound) the Underlying Raw Values (e.g., 33% of a Suppressed Cell Implies n=3) - So Every
+# Stat Derived From n_icd_only Is Suppressed Alongside the Count, Not Just the Count Column.
+icd_only_summary <- icd_only_summary |>
+  mutate(
+    across(
+      c(median_vent_hours, median_icd_to_clif_diff_hrs, pct_short_prone, pct_medium_prone, pct_long_prone),
+      ~ ifelse(n_icd_only > 0 & n_icd_only < small_cell_threshold, NA_real_, .x)
+    ),
+    n_icd_only = mask_small_n(n_icd_only)
+  )
 
-cat("\nICD-only summary data saved as '",
-    path_out_icd_only_summary, "'\n", sep = "")
+# CSV Export Disabled Per Request
+# write_csv(icd_only_summary, path_out_icd_only_summary)
+
+cat("\nICD-only summary data computed but not saved to disk (CSV export disabled)\n")
 ```
