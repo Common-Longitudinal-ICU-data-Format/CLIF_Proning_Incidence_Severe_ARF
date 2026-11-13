@@ -430,6 +430,7 @@ ggsave(
   units = "in"      # units set to inches for precise control
 )
 ```
+
 ```{r Proning 12 Hours by Quarter - No Data Indicating Which Health Systems are Which}
 # Separate "all_sites" and individual sites data for clarity
 overall_data <- prone_per_quarter[prone_per_quarter$site == 'all_sites', ]
@@ -588,6 +589,88 @@ ggsave(
   compression = "lzw"
 )
 ```
+
+```{r}
+# Create a Graph of Only One Line
+overall_data <- prone_per_quarter[prone_per_quarter$site == 'all_sites', ]
+site_data <- prone_per_quarter[prone_per_quarter$site != 'all_sites', ]
+# Dynamically create the label with sample size for the "Overall" line
+overall_label <- paste("Overall Trend (n =", overall_data$sample_size[1], ")")
+# Base plot
+base_plot <- ggplot(overall_data, aes(x = study_quarter, y = proned_12_hr_percent)) +
+  # Error bars for "all_sites" data
+  geom_errorbar(
+    aes(ymin = proned_12_hr_percent - (1.96 * standard_error_12), 
+        ymax = proned_12_hr_percent + (1.96 * standard_error_12)), 
+    width = 0.20, color = 'darkgrey', linewidth = 1.05
+  ) +
+  # Main "Overall" line with dynamic label for sample size, converting label to factor
+  geom_line(color = 'black', linewidth = 1.2) +
+  # Define linetype legend with dynamic label
+  scale_linetype_manual(values = setNames("solid", overall_label), name = "") +
+  # Reorder legend to display linetype legend above color gradient legend
+  guides(
+    linetype = guide_legend(order = 1),
+    color = guide_colorbar(order = 2, title.theme = element_text(size = 9))  # Smaller font for color bar title
+  ) +
+  # Adjust legend font sizes in theme
+  theme(
+    legend.text = element_text(size = 14),   # Increase font size for linetype legend text
+    legend.title = element_text(size = 14),  # Increase font size for linetype legend title
+    legend.title.align = 0,  # Aligns legend title to left for clarity
+  ) +
+  # Y-axis for proning percentage and X-axis for study quarter with custom labels and limits
+  scale_y_continuous(breaks = seq(0, 1, by = 0.1), 
+                     labels = scales::percent, 
+                     limits = c(0, 1.025),
+                     name = 'Proned within 12 Hours of Enrollment') +
+  scale_x_continuous(breaks = seq(min_quarter, max_quarter, by = 1),
+                     labels = study_quarter_labels,
+                     limits = c(min_quarter - 0.1, max_quarter + 0.1),
+                     name = 'Year:Months') +
+  # Add COVID-19 period separator with labels
+  geom_vline(xintercept = 9.6667, linetype = 2) +
+  annotate("text", x = 5.667, y = 1.025, label = 'Pre-Pandemic') +
+  geom_vline(xintercept = 17.6667, linetype = 2) +
+  annotate("text", x = 13.667, y = 1.025, label = 'Pandemic') +
+  annotate("text", x = 21.667, y = 1.025, label = 'Post-Pandemic') +
+  theme_classic() +
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1))
+# Display the plot
+base_plot
+
+ggsave(
+  filename = 'proning_by_quarter_12_overall_only.pdf',
+  plot = base_plot,
+  path = paste0(project_location, '/summary_output/graphs/'),
+  width = 12,       # adjust width to make it wide
+  height = 6,       # adjust height for PowerPoint-friendly proportions
+  units = "in"      # units set to inches for precise control
+)
+
+ggsave(
+  filename = 'proning_by_quarter_12_overall_only.eps',
+  plot = base_plot,
+  path = paste0(project_location, '/summary_output/graphs/'),
+  width = 12,       # adjust width to make it wide
+  height = 6,       # adjust height for PowerPoint-friendly proportions
+  units = "in",      # units set to inches for precise control
+  device = cairo_ps,
+  dpi = 1000
+)
+
+ggsave(
+  filename = 'proning_by_quarter_12_overall_only.tiff',
+  plot = base_plot,
+  path = paste0(project_location, '/summary_output/graphs/'),
+  width = 12,
+  height = 6,
+  units = "in",
+  dpi = 1000,
+  compression = "lzw"
+)
+```
+
 
 ```{r Create Time Series Plot by COVID Status}
 prone_per_quarter_covid <- prone_per_quarter_covid |>
